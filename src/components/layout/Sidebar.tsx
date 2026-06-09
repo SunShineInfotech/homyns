@@ -1,103 +1,80 @@
 import { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard,
-  FilePlus,
-  Users,
-  Package,
-  FileText,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
+  LayoutDashboard, FilePlus, FileText, Users, Package, Boxes, Layers,
+  IdCard, DoorOpen, Map, Building2, MapPin, Settings, UserCircle,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: FilePlus, label: "Create Quotation", path: "/create-quotation" },
-  { icon: Users, label: "Clients", path: "/clients" },
+  { icon: FileText, label: "Quotation History", path: "/quotations" },
+  { icon: Users, label: "Customers", path: "/customers" },
   { icon: Package, label: "Packages", path: "/packages" },
-  { icon: FileText, label: "Quotations History", path: "/quotations" },
+  { icon: Boxes, label: "Items", path: "/items" },
+  { icon: Layers, label: "Raw Materials", path: "/raw-materials" },
+  { icon: IdCard, label: "Client Details", path: "/client-details" },
+  { icon: DoorOpen, label: "Rooms", path: "/rooms" },
+  { icon: Map, label: "State Master", path: "/states" },
+  { icon: Building2, label: "City Master", path: "/cities" },
+  { icon: MapPin, label: "Area Master", path: "/areas" },
   { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: UserCircle, label: "Profile", path: "/profile" },
 ];
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const location = useLocation();
 
   return (
     <aside
       className={cn(
-        "h-screen bg-sidebar flex flex-col transition-all duration-300 ease-out sticky top-0",
+        "hidden md:flex h-screen bg-sidebar flex-col transition-all duration-300 sticky top-0 z-30",
         collapsed ? "w-20" : "w-64"
       )}
     >
-      {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-muted/30">
+      <div className="h-16 flex items-center px-4 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0">
-            <span className="text-primary-foreground font-display font-semibold text-lg">
-              ID
-            </span>
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-md">
+            <span className="text-primary font-display font-bold text-lg">H</span>
           </div>
           {!collapsed && (
-            <div className="flex flex-col animate-fade-in">
-              <span className="text-sidebar-foreground font-display font-semibold text-lg leading-tight">
-                InteriorDesk
-              </span>
-              <span className="text-sidebar-muted text-xs">
-                Quotation System
-              </span>
+            <div className="flex flex-col">
+              <span className="text-sidebar-foreground font-display font-semibold text-lg leading-tight">Homyns</span>
+              <span className="text-sidebar-muted text-[11px] uppercase tracking-wider">CRM & Quotation</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-6 space-y-1.5">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 group",
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            end={item.path === "/"}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group",
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-soft"
-                  : "text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-foreground"
-              )}
-            >
-              <item.icon
-                className={cn(
-                  "w-5 h-5 flex-shrink-0 transition-transform duration-200",
-                  !isActive && "group-hover:scale-110"
-                )}
-              />
-              {!collapsed && (
-                <span className="font-medium text-sm animate-fade-in">
-                  {item.label}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
+                  ? "bg-white text-primary shadow-md font-semibold"
+                  : "text-sidebar-foreground/85 hover:bg-sidebar-hover hover:text-white"
+              )
+            }
+          >
+            <item.icon className="w-5 h-5 shrink-0" />
+            {!collapsed && <span className="text-sm">{item.label}</span>}
+          </NavLink>
+        ))}
       </nav>
 
-      {/* Collapse Button */}
-      <div className="p-3 border-t border-sidebar-muted/30">
+      <div className="p-3 border-t border-white/10 shrink-0">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all duration-200"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sidebar-muted hover:text-white hover:bg-sidebar-hover transition-all"
         >
-          {collapsed ? (
-            <ChevronRight className="w-5 h-5" />
-          ) : (
-            <>
-              <ChevronLeft className="w-5 h-5" />
-              <span className="text-sm font-medium">Collapse</span>
-            </>
-          )}
+          {collapsed ? <ChevronRight className="w-5 h-5" /> : (<><ChevronLeft className="w-5 h-5" /><span className="text-sm font-medium">Collapse</span></>)}
         </button>
       </div>
     </aside>

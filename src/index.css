@@ -2,138 +2,102 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "@fontsource/dm-sans/400.css";
-@import "@fontsource/dm-sans/500.css";
-@import "@fontsource/dm-sans/600.css";
-@import "@fontsource/dm-sans/700.css";
-@import "@fontsource/playfair-display/500.css";
-@import "@fontsource/playfair-display/600.css";
-
-/* Interior Design Quotation System - Premium Design System */
+/* Homyns — Corporate Design System */
 
 @layer base {
   :root {
-    --background: 40 20% 98%;
-    --foreground: 220 20% 15%;
-
+    /* Surfaces */
+    --background: 210 20% 97%;         /* #F5F7FA */
+    --foreground: 220 39% 11%;         /* #111827 */
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 15%;
-
+    --card-foreground: 220 39% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 15%;
+    --popover-foreground: 220 39% 11%;
 
-    --primary: 175 45% 30%;
+    /* Brand */
+    --primary: 209 79% 28%;            /* #0F4C81 */
     --primary-foreground: 0 0% 100%;
+    --primary-glow: 209 86% 51%;       /* #1E88E5 */
 
-    --secondary: 40 15% 94%;
-    --secondary-foreground: 220 20% 15%;
+    --secondary: 210 17% 95%;
+    --secondary-foreground: 220 39% 11%;
 
-    --muted: 40 10% 92%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 210 17% 95%;
+    --muted-foreground: 220 9% 46%;    /* #6B7280 */
 
-    --accent: 35 70% 55%;
-    --accent-foreground: 220 20% 15%;
+    --accent: 209 86% 51%;             /* #1E88E5 */
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 65% 55%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 40 15% 88%;
-    --input: 40 15% 88%;
-    --ring: 175 45% 30%;
-
-    --radius: 0.75rem;
-
-    /* Custom tokens */
-    --sidebar-bg: 220 15% 12%;
-    --sidebar-foreground: 40 10% 85%;
-    --sidebar-muted: 220 10% 25%;
-    --sidebar-accent: 175 45% 40%;
-    --sidebar-hover: 220 12% 18%;
-
-    --success: 145 60% 40%;
+    --success: 123 46% 34%;            /* #2E7D32 */
     --success-foreground: 0 0% 100%;
 
-    --warning: 35 90% 50%;
-    --warning-foreground: 220 20% 15%;
+    --warning: 45 96% 44%;             /* #F9A825 */
+    --warning-foreground: 220 39% 11%;
+
+    --destructive: 0 65% 51%;          /* #D32F2F */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;             /* #E5E7EB */
+    --input: 220 13% 91%;
+    --ring: 209 86% 51%;
+
+    --radius: 0.75rem;                  /* 12px */
+
+    /* Sidebar */
+    --sidebar-bg: 209 79% 28%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-muted: 209 50% 75%;
+    --sidebar-accent: 209 86% 51%;
+    --sidebar-hover: 209 65% 22%;
 
     --gold: 38 75% 55%;
     --gold-light: 38 60% 85%;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(220 20% 15% / 0.03);
-    --shadow-md: 0 4px 6px -1px hsl(220 20% 15% / 0.05), 0 2px 4px -2px hsl(220 20% 15% / 0.03);
-    --shadow-lg: 0 10px 15px -3px hsl(220 20% 15% / 0.06), 0 4px 6px -4px hsl(220 20% 15% / 0.03);
-    --shadow-xl: 0 20px 25px -5px hsl(220 20% 15% / 0.08), 0 8px 10px -6px hsl(220 20% 15% / 0.04);
+    --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+    --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.06), 0 2px 6px -2px rgb(15 23 42 / 0.04);
+    --shadow-lg: 0 12px 28px -8px rgb(15 23 42 / 0.10), 0 4px 12px -4px rgb(15 23 42 / 0.06);
+    --shadow-xl: 0 24px 48px -12px rgb(15 23 42 / 0.14);
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(175 45% 30%), hsl(175 50% 25%));
-    --gradient-gold: linear-gradient(135deg, hsl(38 75% 55%), hsl(35 80% 50%));
-    --gradient-subtle: linear-gradient(180deg, hsl(40 20% 98%), hsl(40 15% 96%));
+    --gradient-primary: linear-gradient(135deg, hsl(209 79% 28%), hsl(209 86% 42%));
+    --gradient-accent: linear-gradient(135deg, hsl(209 86% 51%), hsl(199 89% 48%));
+    --gradient-subtle: linear-gradient(180deg, hsl(210 20% 98%), hsl(210 17% 95%));
   }
 
   .dark {
-    --background: 220 15% 10%;
-    --foreground: 40 10% 92%;
-
-    --card: 220 15% 13%;
-    --card-foreground: 40 10% 92%;
-
-    --popover: 220 15% 13%;
-    --popover-foreground: 40 10% 92%;
-
-    --primary: 175 50% 45%;
-    --primary-foreground: 220 20% 10%;
-
-    --secondary: 220 12% 20%;
-    --secondary-foreground: 40 10% 92%;
-
-    --muted: 220 12% 18%;
-    --muted-foreground: 220 10% 60%;
-
-    --accent: 35 70% 55%;
-    --accent-foreground: 220 20% 10%;
-
-    --destructive: 0 60% 50%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 220 12% 22%;
-    --input: 220 12% 22%;
-    --ring: 175 50% 45%;
+    --background: 220 30% 8%;
+    --foreground: 210 17% 95%;
+    --card: 220 27% 12%;
+    --card-foreground: 210 17% 95%;
+    --popover: 220 27% 12%;
+    --popover-foreground: 210 17% 95%;
+    --primary: 209 86% 55%;
+    --primary-foreground: 220 39% 11%;
+    --secondary: 220 20% 18%;
+    --secondary-foreground: 210 17% 95%;
+    --muted: 220 20% 18%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 209 86% 55%;
+    --accent-foreground: 220 39% 11%;
+    --border: 220 20% 22%;
+    --input: 220 20% 22%;
+    --ring: 209 86% 55%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground font-sans antialiased;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-semibold tracking-tight;
-  }
+  * { @apply border-border; }
+  html, body { @apply bg-background text-foreground antialiased; font-family: 'Inter', system-ui, sans-serif; }
+  h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', 'Inter', sans-serif; @apply font-semibold tracking-tight; }
 }
 
 @layer utilities {
-  .shadow-soft {
-    box-shadow: var(--shadow-md);
-  }
-
-  .shadow-elevated {
-    box-shadow: var(--shadow-lg);
-  }
-
-  .gradient-primary {
-    background: var(--gradient-primary);
-  }
-
-  .gradient-gold {
-    background: var(--gradient-gold);
-  }
-
-  .gradient-subtle {
-    background: var(--gradient-subtle);
-  }
+  .shadow-soft { box-shadow: var(--shadow-md); }
+  .shadow-elevated { box-shadow: var(--shadow-lg); }
+  .shadow-premium { box-shadow: var(--shadow-xl); }
+  .gradient-primary { background: var(--gradient-primary); }
+  .gradient-accent { background: var(--gradient-accent); }
+  .gradient-subtle { background: var(--gradient-subtle); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 }
