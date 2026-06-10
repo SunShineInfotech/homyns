@@ -3,52 +3,158 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { LogOut, Mail, Phone, Pencil, KeyRound } from "lucide-react";
+import {
+  LogOut, Mail, Phone, Pencil, KeyRound, Bell, Settings as SettingsIcon,
+  LifeBuoy, MessageSquare, ShieldCheck, FileText, ChevronRight, ExternalLink,
+} from "lucide-react";
 import { useConfirm } from "@/lib/confirm";
+import { cn } from "@/lib/utils";
+
+type Item = {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  hint?: string;
+  onClick?: () => void;
+};
+
+function Section({ title, items }: { title: string; items: Item[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </p>
+      <Card className="rounded-2xl border-border overflow-hidden divide-y divide-border">
+        {items.map((it, i) => (
+          <button
+            key={i}
+            onClick={it.onClick}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-muted/40 transition"
+          >
+            <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <it.icon className="w-4.5 h-4.5" />
+            </span>
+            <span className="flex-1">
+              <span className="block text-sm font-medium text-foreground">{it.label}</span>
+              {it.hint && <span className="block text-xs text-muted-foreground">{it.hint}</span>}
+            </span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </button>
+        ))}
+      </Card>
+    </div>
+  );
+}
 
 export default function Profile() {
   const navigate = useNavigate();
   const confirm = useConfirm();
 
   const handleLogout = async () => {
-    const ok = await confirm({ title: "Logout", message: "Are you sure you want to logout?", confirmText: "Logout", destructive: true });
+    const ok = await confirm({
+      title: "Logout",
+      message: "Are you sure you want to logout of Homyns?",
+      confirmText: "Logout",
+      destructive: true,
+    });
     if (ok) navigate("/login");
   };
 
   return (
-    <MainLayout title="Profile" subtitle="Your account">
-      <div className="max-w-2xl mx-auto space-y-5 animate-fade-in">
-        <Card className="p-6 rounded-2xl border-border">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-            <Avatar className="w-20 h-20">
-              <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-display font-semibold">AK</AvatarFallback>
+    <MainLayout title="Profile" subtitle="Account & app preferences">
+      <div className="max-w-2xl mx-auto space-y-5 pb-24 md:pb-6 animate-fade-in">
+        {/* Identity card */}
+        <Card className="p-5 rounded-2xl border-border bg-gradient-to-br from-primary/5 via-card to-card">
+          <div className="flex items-center gap-4">
+            <Avatar className="w-16 h-16 ring-4 ring-background shadow-md">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xl font-display font-semibold">
+                AK
+              </AvatarFallback>
             </Avatar>
-            <div className="flex-1 text-center sm:text-left">
-              <h2 className="text-xl font-display font-semibold text-foreground">Arjun Kapoor</h2>
-              <p className="text-sm text-muted-foreground">Senior Interior Designer</p>
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-3 text-sm">
-                <span className="inline-flex items-center gap-2 text-muted-foreground justify-center sm:justify-start"><Phone className="w-4 h-4" /> +91 98765 43210</span>
-                <span className="inline-flex items-center gap-2 text-muted-foreground justify-center sm:justify-start"><Mail className="w-4 h-4" /> arjun@homyns.in</span>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-display font-semibold text-foreground truncate">
+                Arjun Kapoor
+              </h2>
+              <p className="text-xs text-muted-foreground">Senior Interior Designer</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" /> +91 98765 43210</span>
+                <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" /> arjun@homyns.in</span>
               </div>
             </div>
+            <Button
+              size="icon"
+              variant="outline"
+              className="rounded-xl shrink-0"
+              onClick={() => navigate("/profile/edit")}
+              aria-label="Edit profile"
+            >
+              <Pencil className="w-4 h-4" />
+            </Button>
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Button variant="outline" className="h-12 rounded-xl justify-start gap-3"><Pencil className="w-4 h-4" /> Edit Profile</Button>
-          <Button variant="outline" className="h-12 rounded-xl justify-start gap-3"><KeyRound className="w-4 h-4" /> Change Password</Button>
+        {/* Account */}
+        <Section
+          title="Account"
+          items={[
+            { icon: Pencil, label: "Edit Profile", hint: "Name, photo, contact", onClick: () => navigate("/profile/edit") },
+            { icon: KeyRound, label: "Change Password", hint: "Update your login password" },
+            { icon: Bell, label: "Notifications", hint: "Email & in-app alerts" },
+            { icon: SettingsIcon, label: "App Settings", hint: "Preferences & defaults", onClick: () => navigate("/settings") },
+          ]}
+        />
+
+        {/* Support */}
+        <Section
+          title="Support"
+          items={[
+            { icon: LifeBuoy, label: "Help Center", hint: "Guides & FAQs" },
+            { icon: MessageSquare, label: "Contact Support", hint: "We typically reply within 24h" },
+            { icon: ShieldCheck, label: "Privacy Policy" },
+            { icon: FileText, label: "Terms & Conditions" },
+          ]}
+        />
+
+        {/* About */}
+        <div className="space-y-2">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            About
+          </p>
+          <Card className="rounded-2xl border-border p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">Managed by</p>
+                <p className="text-sm font-semibold text-foreground">Sunshine Infotech</p>
+              </div>
+              <a
+                href="https://sunshineinfotech.in"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                sunshineinfotech.in <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">Version</p>
+              <p className="text-xs font-mono text-foreground">v1.0.0</p>
+            </div>
+          </Card>
         </div>
 
-        <Card className="p-6 rounded-2xl border-border">
-          <Button variant="destructive" onClick={handleLogout} className="w-full h-12 rounded-xl gap-2">
-            <LogOut className="w-5 h-5" /> Logout
-          </Button>
-        </Card>
+        {/* Logout */}
+        <Button
+          variant="outline"
+          onClick={handleLogout}
+          className={cn(
+            "w-full h-12 rounded-2xl gap-2 border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"
+          )}
+        >
+          <LogOut className="w-5 h-5" /> Logout
+        </Button>
 
-        <div className="text-center pt-4 pb-2 space-y-1">
-          <p className="text-xs text-muted-foreground">Managed by <span className="font-semibold text-foreground">Sunshine Infotech</span></p>
-          <p className="text-[11px] text-muted-foreground">Version v1.0.0</p>
-        </div>
+        <p className="text-center text-[11px] text-muted-foreground pt-1">
+          © 2026 Homyns. All rights reserved.
+        </p>
       </div>
     </MainLayout>
   );

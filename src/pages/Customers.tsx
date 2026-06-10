@@ -7,11 +7,11 @@ import { customers, Customer } from "@/data/mockData";
 
 export default function Customers() {
   return (
-    <MainLayout title="Customers" subtitle="Manage your customer database">
+    <MainLayout title="Clients" subtitle="Manage your client database">
       <CrudShell<Customer>
-        entityName="Customer"
+        entityName="Client"
         initialData={customers}
-        exportFileName="customers.csv"
+        exportFileName="clients.csv"
         searchKeys={["name", "mobile", "email"]}
         emptyRow={() => ({ id: newId(), name: "", mobile: "", email: "", note: "" })}
         columns={[
@@ -30,7 +30,7 @@ export default function Customers() {
         validate={(r) => !r.name.trim() ? "Name is required" : !r.mobile.trim() ? "Mobile is required" : null}
         renderForm={(row, setRow) => (
           <>
-            <div><Label>Customer Name</Label><Input value={row.name} onChange={(e) => setRow({ ...row, name: e.target.value })} className="h-11 rounded-xl mt-1.5" /></div>
+            <div><Label>Client Name</Label><Input value={row.name} onChange={(e) => setRow({ ...row, name: e.target.value })} className="h-11 rounded-xl mt-1.5" /></div>
             <div><Label>Mobile Number</Label><Input value={row.mobile} onChange={(e) => setRow({ ...row, mobile: e.target.value })} className="h-11 rounded-xl mt-1.5" /></div>
             <div><Label>Email</Label><Input type="email" value={row.email} onChange={(e) => setRow({ ...row, email: e.target.value })} className="h-11 rounded-xl mt-1.5" /></div>
             <div><Label>Note</Label><Textarea value={row.note ?? ""} onChange={(e) => setRow({ ...row, note: e.target.value })} className="rounded-xl mt-1.5" rows={3} /></div>

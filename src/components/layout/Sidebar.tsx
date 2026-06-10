@@ -11,7 +11,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: FilePlus, label: "Create Quotation", path: "/create-quotation" },
   { icon: FileText, label: "Quotation History", path: "/quotations" },
-  { icon: Users, label: "Customers", path: "/customers" },
+  { icon: Users, label: "Clients", path: "/clients" },
   { icon: Package, label: "Packages", path: "/packages" },
   { icon: Boxes, label: "Items", path: "/items" },
   { icon: Layers, label: "Raw Materials", path: "/raw-materials" },
