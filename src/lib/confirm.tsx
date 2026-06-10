@@ -43,20 +43,28 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     <ConfirmCtx.Provider value={confirm}>
       {children}
       <AlertDialog open={open} onOpenChange={(v) => !v && handle(false)}>
-        <AlertDialogContent className="rounded-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-display">{opts.title || "Confirm Action"}</AlertDialogTitle>
-            <AlertDialogDescription>
+        <AlertDialogContent className="max-w-sm w-[calc(100%-2rem)] rounded-2xl p-6 gap-5 border-border shadow-2xl">
+          <AlertDialogHeader className="space-y-2">
+            <AlertDialogTitle className="font-display text-lg">
+              {opts.title || "Confirm Action"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
               {opts.message || "Are you sure you want to continue?"}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => handle(false)}>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel
+              onClick={() => handle(false)}
+              className="rounded-xl h-10 mt-0"
+            >
               {opts.cancelText || "Cancel"}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => handle(true)}
-              className={opts.destructive ? "bg-destructive hover:bg-destructive/90" : ""}
+              className={
+                "rounded-xl h-10 " +
+                (opts.destructive ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground" : "")
+              }
             >
               {opts.confirmText || "Yes, Continue"}
             </AlertDialogAction>

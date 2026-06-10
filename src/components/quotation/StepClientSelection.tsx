@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ export function StepClientSelection({
   onSelectClient,
 }: StepClientSelectionProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
 
   const filteredClients = clients.filter(
     (client) =>
@@ -49,7 +51,7 @@ export function StepClientSelection({
                 Choose an existing client or add a new one
               </p>
             </div>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => navigate("/clients")}>
               <Plus className="w-4 h-4" />
               Add Client
             </Button>
