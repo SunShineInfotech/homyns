@@ -22,15 +22,17 @@ interface Props<T> {
   renderMobileCard?: (row: T) => ReactNode;
   actions?: ReactNode;
   emptyText?: string;
+  filters?: ReactNode;
 }
 
 export function DataTable<T extends Record<string, any>>({
   data, columns, pageSize = 10, searchKeys, exportFileName = "export.csv",
-  renderMobileCard, actions, emptyText = "No records found.",
+  renderMobileCard, actions, emptyText = "No records found.", filters,
 }: Props<T>) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
 
   const filtered = useMemo(() => {
     let rows = [...data];
@@ -80,8 +82,26 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-        <div className="relative flex-1 max-w-md">
+      {/* Filters (mobile collapsible) */}
+      {filters && (
+        <>
+          <div className="md:hidden">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters((s) => !s)}
+              className="w-full h-10 rounded-xl"
+            >
+              {showFilters ? "Hide Filters" : "Show Filters"}
+            </Button>
+            {showFilters && <div className="mt-3">{filters}</div>}
+          </div>
+          <div className="hidden md:block">{filters}</div>
+        </>
+      )}
+
+      {/* 80/20 search + actions row */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={query}
@@ -90,20 +110,21 @@ export function DataTable<T extends Record<string, any>>({
             className="pl-10 h-11 rounded-xl bg-card"
           />
         </div>
-        <div className="flex items-center gap-2">
-          {actions}
-          <Button variant="outline" onClick={exportCsv} className="h-11 rounded-xl gap-2">
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">CSV</span>
-          </Button>
-        </div>
+        {actions && <div className="shrink-0">{actions}</div>}
+        <Button
+          variant="outline"
+          onClick={exportCsv}
+          className="hidden md:inline-flex h-11 rounded-xl gap-2 shrink-0"
+        >
+          <Download className="w-4 h-4" /> CSV
+        </Button>
       </div>
 
-      {/* Mobile cards */}
+      {/* Mobile cards (no pagination) */}
       {renderMobileCard && (
         <div className="md:hidden space-y-3">
-          {slice.length === 0 && <p className="text-center text-muted-foreground py-12">{emptyText}</p>}
-          {slice.map((r, i) => <div key={i}>{renderMobileCard(r)}</div>)}
+          {filtered.length === 0 && <p className="text-center text-muted-foreground py-12">{emptyText}</p>}
+          {filtered.map((r, i) => <div key={i}>{renderMobileCard(r)}</div>)}
         </div>
       )}
 
@@ -153,9 +174,9 @@ export function DataTable<T extends Record<string, any>>({
         </div>
       </div>
 
-      {/* Pagination */}
+      {/* Desktop pagination only */}
       {filtered.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between text-sm text-muted-foreground">
+        <div className="hidden md:flex gap-3 items-center justify-between text-sm text-muted-foreground">
           <div>
             Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length}
           </div>
