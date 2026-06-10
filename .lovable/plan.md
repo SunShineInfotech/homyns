@@ -1,65 +1,57 @@
+# HOMYNS — Full UI Revision Plan
 
-This is a large multi-area revision. I'll deliver it in 4 sequential phases so each lands cleanly. Confirm or tell me to reorder/drop a phase before I start.
+This is a large request. I'll group it into 5 phases so you can review progress. All changes are **frontend-only**, mock data, no backend.
 
-## Phase 1 — Foundation UI (mobile shell, profile, popups, terminology)
+---
 
-- **Mobile bottom nav redesign** (`MobileBottomNav.tsx`)
-  - Floating curved footer, rounded top corners, soft elevated shadow, safe-area aware
-  - Items: Home, Quotations, **+ Create (elevated floating)**, Clients, Profile
-- **Profile page → "More" page** (`Profile.tsx`)
-  - Grouped sections: Account (Edit Profile, Change Password, Notifications, App Settings), Support (Help Center, Contact Support, Privacy Policy, Terms), About (Sunshine Infotech link, v1.0.0), Logout with confirm
-- **Popup/dialog restyle** — narrower max-width, padded, rounded-2xl, modern confirm style (tune `ConfirmProvider` + base dialog usage)
-- **Terminology**: rename "Customer" → "Client" app-wide (labels, routes alias `/customers` → `/clients`, files keep internal names but visible text changes; nav, headers, page titles, mock data labels)
-- **Fix "Select Client" button** in Create Quotation step 1 (Add Client currently no-op → route to dedicated Add Client page)
+## Phase 1 — Shell & Navigation polish
+- **Curved mobile footer**: redesign `MobileBottomNav.tsx` with a true SVG curve cut-out around the floating "+" button (premium app feel).
+- **Profile → "More" page**: list-style rows like a mobile app's More tab (Edit Profile, Change Password, Notifications, App Settings, Help, Privacy, Terms, Logout). Footer: "Managed by **Sunshine Infotech**" → links to `https://sunshineinfotech.in`. Version v1.0.0.
+- **Dialog sizing**: reduce width, add proper padding/margins (no more full-width popups).
+- **Rename Customer → Client** everywhere (UI text + type aliases). `/customers` redirects to `/clients`.
 
-## Phase 2 — List pages, filters, add/edit pages
+## Phase 2 — Listing pages, filters, dedicated pages
+- All Add/Edit moved to **dedicated routes** (e.g. `/clients/new`, `/clients/:id/edit`). Dialogs removed from `CrudShell` (kept only for confirms).
+- **List header**: 80% search input + 20% "+" icon button, single line, mobile-friendly.
+- **Filters**: inline on desktop; on mobile a "Filters" toggle button reveals them. Start/End date side-by-side on mobile in one row. **Auto-apply** (no Apply/Reset buttons — only a small "Clear" link). Default range = **last 30 days**.
+- **Mobile list view**: card divs only, no table, **no pagination**, no CSV download (download stays desktop-only).
+- **Fix Dashboard table sort** (asc/desc) on desktop.
+- **Fix "Select Client" button** in Step 1 of Create Quotation → opens dedicated client picker / `/clients/new`.
 
-- **Search + Add row**: 80/20 layout on all list pages
-- **Mobile = cards**, no pagination (infinite list); **Desktop = table** with sort/pagination/CSV
-- **Fix dashboard table ASC/DESC sort**
-- **Filters**
-  - Mobile: collapsible "Show/Hide Filters", Start+End date in one row, default last 30 days, auto-apply (no Search/Reset buttons)
-  - Desktop: inline filter bar, auto-apply
-- **Dedicated Add/Edit pages** (replace CrudShell modal forms) for: Client, Package, Item, Raw Material, Employee, Room, Category, Subcategory
-  - Routes like `/clients/new`, `/clients/:id/edit`, etc.
-  - CrudShell stays for list/table; edit flow navigates to page
+## Phase 3 — Master restructure (per your schema)
+- **Client**: name, phone, alt phone, whatsapp (+ buttons "Same as Phone" / "Same as Alt"), email, address, state, city, area, notes.
+- **Employee** (new master): name, email, phone, reporting_manager, joining_date, aadhaar, profile_image, is_active. Mock OTP & last_login shown read-only.
+- **Package**: name, base_price, duration_days, **CKEditor rich description** (images + long text). Per-package: items table with **per-item remark**, and inside each item the **raw materials with per-material remark** (grouped table so it's clear which raw material belongs to which item).
+- **Category** (renamed from Items master) + new **Subcategory** (category_id, name, default_width/height/unit/rate, material_type).
+- **Raw Material**: name, color, unit, size, thickness, brand, stock_qty, min_stock, rate.
+- **Item Type radio** (Color / Plastic / Sheet / Hardware / Glass / Metal / Wood / Other) added to Subcategory / Item form.
+- **Room master**: room name + linked categories (used by quotation flow).
 
-## Phase 3 — Masters restructure
+## Phase 4 — Quotation workflow upgrades
+- **Customize Items step**: hierarchy Room → Category → Subcategory → Raw Materials. Per-item **requirement remark** textarea. Per raw-material details shown inline.
+- **Summary step**: **Special Instructions** textarea, **Discount** (₹ or %), **GST toggle** (With / Without). Live recompute: Subtotal → Discount → GST → Final Total.
+- **Status flow**: new quotation saves as **Pending** → goes to new `/quotations/pending` page → Approver can **Approve** or **Reject (with reason)**.
+- On **Reject**: modal asks "Re-Generate or Cancel". Re-Generate opens wizard prefilled with selections, user edits and resubmits.
+- Quotation list shows **Approved By / Rejected By** + timestamps.
+- Dashboard adds **Pending Quotations** widget + KPI.
 
-- **Client** fields: Name, Mobile, Alternate, WhatsApp (+ "Same as Mobile/Alternate" quick buttons), Email, Address, State, City, Area, Notes
-- **Employee** master (new): Name, Email, Phone, Reporting Manager, Joining Date, Aadhaar, Profile Image, Active
-- **Package**: Name, Description (CKEditor rich text), Base Price, Duration Days
-- **Category** (renamed Items): Name
-- **Subcategory** (new): Category, Name, Default W/H/Unit/Rate, Material Type
-- **Raw Material**: Name, Color, Unit, Size, Thickness, Brand, Stock Qty, Min Stock, Rate
-- **Item Type field** with radio: Color/Plastic/Sheet/Hardware/Glass/Metal/Wood/Other (on Subcategory's Material Type)
-- **Room Master**: Room Name + linked Categories
+## Phase 5 — Polish pass
+- Spacing/margin/padding audit across all pages.
+- Consistent rounded-2xl cards, soft shadows.
+- Mobile-first review of every screen.
 
-CKEditor: use `@ckeditor/ckeditor5-react` + classic build (images, tables, lists, headings, formatting).
-
-## Phase 4 — Quotation workflow & approval
-
-⚠️ Preserve existing 6-step flow; add features on top.
-- **Customize Items step**: show Item → Raw Materials → Item Remark textarea per item
-- **Summary step additions**: Special Instructions textarea, Discount (% or ₹), GST radio (With/Without), live total recalc
-- **Hierarchy enhancement**: Room → Category → Subcategory → Raw Materials → Remarks in summary
-- **Status workflow**:
-  - New quotation default status `Pending Approval`
-  - New page `/quotations/pending` with Approver, Created By, Date
-  - Dashboard widget: Pending Quotations
-  - Approve / Reject actions; store Approved/Rejected By + Date + Rejection Reason
-  - Reject modal asks for reason → buttons Re-Generate / Cancel
-  - Re-Generate opens wizard prefilled with prior selections
+---
 
 ## Technical notes
+- CKEditor: add `@ckeditor/ckeditor5-react` + `@ckeditor/ckeditor5-build-classic`, lazy-loaded only on Package edit page.
+- New types in `src/data/mockData.ts`: `Employee`, `Category`, `Subcategory`, `Approval`, extended `Client`, extended `Quotation` (status, approver, reject reason, special instructions, discount, gst flag, items[] with remarks).
+- New routes: `/clients/new`, `/clients/:id/edit`, `/packages/new`, `/packages/:id/edit`, `/employees`, `/subcategories`, `/quotations/pending`, plus equivalent edit pages for each master.
+- `CrudShell` simplified: list + search + add button only; remove dialog form.
+- `DataTable`: add `defaultDateRange={days:30}` filter support, hide download on mobile, hide pagination on mobile.
 
-- All data stays in `src/data/mockData.ts` (frontend-only, no backend per earlier decision)
-- New types added for Employee, Category, Subcategory, Approval metadata
-- Routes added to `src/App.tsx`; sidebar/bottom nav updated
-- CKEditor adds ~1 dependency; lazy-loaded on Package edit page
-- Existing CrudShell modal-edit kept as fallback but list pages will route to dedicated edit pages
+---
 
-## Open questions
-
-1. OK to do all 4 phases now in one large pass, or stop and review after Phase 1?
-2. For "Customer → Client" rename: keep route `/customers` as an alias (back-compat) or hard-redirect to `/clients`?
+## Questions before I start
+1. **Phasing**: build all 5 phases now in one big pass, or **stop after each phase** for review? (Recommended: stop after Phase 2 — that's the biggest UX shift.)
+2. **CKEditor**: confirm OK to add ~2 npm packages for rich text? Alternative is a lighter editor (`react-quill`, ~1 package).
+3. **Approval roles**: should *any* logged-in mock user be able to approve, or only an "Admin" role? (Frontend-only — just controls which buttons show.)

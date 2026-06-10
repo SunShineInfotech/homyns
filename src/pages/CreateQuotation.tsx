@@ -47,6 +47,10 @@ export default function CreateQuotation() {
   const [selectedPackage, setSelectedPackage] = useState<PackageType | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [expandedRooms, setExpandedRooms] = useState<string[]>([]);
+  const [discountType, setDiscountType] = useState<"rs" | "pct">("rs");
+  const [discountValue, setDiscountValue] = useState(0);
+  const [withGst, setWithGst] = useState(true);
+  const [specialInstructions, setSpecialInstructions] = useState("");
 
   const handlePackageSelect = (pkg: PackageType) => {
     setSelectedPackage(pkg);
@@ -58,7 +62,7 @@ export default function CreateQuotation() {
   const updateRoomItem = (
     roomId: string,
     itemId: string,
-    updates: Partial<{ quantity: number; included: boolean; price: number }>
+    updates: Partial<{ quantity: number; included: boolean; price: number; remark: string }>
   ) => {
     setRooms((prev) =>
       prev.map((room) =>
@@ -74,7 +78,7 @@ export default function CreateQuotation() {
     );
   };
 
-  const { subtotal, tax, grandTotal } = useMemo(() => {
+  const { subtotal, discountAmount, tax, grandTotal } = useMemo(() => {
     const sub = rooms.reduce(
       (acc, room) =>
         acc +
@@ -83,13 +87,16 @@ export default function CreateQuotation() {
           .reduce((sum, item) => sum + item.price * item.quantity, 0),
       0
     );
-    const taxAmount = sub * 0.18; // 18% GST
+    const disc = discountType === "pct" ? (sub * discountValue) / 100 : discountValue;
+    const afterDisc = Math.max(0, sub - disc);
+    const taxAmount = withGst ? afterDisc * 0.18 : 0;
     return {
       subtotal: sub,
+      discountAmount: disc,
       tax: taxAmount,
-      grandTotal: sub + taxAmount,
+      grandTotal: afterDisc + taxAmount,
     };
-  }, [rooms]);
+  }, [rooms, discountType, discountValue, withGst]);
 
   const canProceed = () => {
     switch (currentStep) {
@@ -148,6 +155,15 @@ export default function CreateQuotation() {
             selectedPackage={selectedPackage}
             rooms={rooms}
             subtotal={subtotal}
+            discountType={discountType}
+            setDiscountType={setDiscountType}
+            discountValue={discountValue}
+            setDiscountValue={setDiscountValue}
+            withGst={withGst}
+            setWithGst={setWithGst}
+            specialInstructions={specialInstructions}
+            setSpecialInstructions={setSpecialInstructions}
+            discountAmount={discountAmount}
             tax={tax}
             grandTotal={grandTotal}
           />
