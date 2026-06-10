@@ -26,7 +26,7 @@ export default function QuotationHistory() {
 
   const columns: Column<QuotationRecord>[] = [
     { key: "id", header: "ID", sortable: true },
-    { key: "customerName", header: "Customer", sortable: true },
+    { key: "customerName", header: "Client", sortable: true },
     { key: "packageName", header: "Package", sortable: true },
     { key: "amount", header: "Amount", sortable: true, render: (r) => <span className="font-semibold">{fmtINR(r.amount)}</span>, accessor: (r) => r.amount },
     { key: "status", header: "Status", sortable: true, render: (r) => (
@@ -49,8 +49,8 @@ export default function QuotationHistory() {
               <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="h-11 rounded-xl" />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">Customer</Label>
-              <SearchableSelect options={toOptions(customers)} value={customerId} onChange={setCustomerId} placeholder="All customers" clearable />
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Client</Label>
+              <SearchableSelect options={toOptions(customers)} value={customerId} onChange={setCustomerId} placeholder="All clients" clearable />
             </div>
             <div className="flex gap-2 md:items-end">
               <Button onClick={() => {}} className="h-11 rounded-xl flex-1">Apply Filter</Button>

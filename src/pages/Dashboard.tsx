@@ -185,7 +185,7 @@ export default function Dashboard() {
               <thead className="bg-secondary/60">
                 <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider">
                   <th className="px-5 py-3">ID</th>
-                  <th className="px-5 py-3">Customer</th>
+                  <th className="px-5 py-3">Client</th>
                   <th className="px-5 py-3 hidden md:table-cell">Package</th>
                   <th className="px-5 py-3">Amount</th>
                   <th className="px-5 py-3">Status</th>
