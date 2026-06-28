@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card } from "@/components/ui/card";
@@ -6,6 +7,24 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   LogOut, Mail, Phone, Pencil, KeyRound, Bell, Settings as SettingsIcon,
   LifeBuoy, MessageSquare, ShieldCheck, FileText, ChevronRight, ExternalLink,
+  LayoutDashboard,
+  FilePlus,
+  Users,
+  Package,
+  BarChart3,
+  ClipboardList,
+  UserPlus,
+  PhoneCall,
+  Layers,
+  DoorOpen,
+  Ruler,
+  Tag,
+  Map,
+  Building2,
+  MapPin,
+  UserCircle,
+  FolderTree,
+  Grid,
 } from "lucide-react";
 import { useConfirm } from "@/lib/confirm";
 import { cn } from "@/lib/utils";
@@ -18,6 +37,8 @@ type Item = {
 };
 
 function Section({ title, items }: { title: string; items: Item[] }) {
+  if (items.length === 0) return null;
+  
   return (
     <div className="space-y-2">
       <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -48,6 +69,38 @@ function Section({ title, items }: { title: string; items: Item[] }) {
 export default function Profile() {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const [userData, setUserData] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      const userRaw = localStorage.getItem("user_data");
+      if (userRaw) {
+        const parsed = JSON.parse(userRaw);
+        setUserData(parsed);
+      }
+    } catch (error) {
+      console.error("Error parsing user_data:", error);
+    }
+  }, []);
+
+  const getUserInitials = (): string => {
+    if (!userData?.name) return "U";
+    const nameParts = userData.name.trim().split(" ");
+    if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase();
+    return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+  };
+
+  const getUserName = (): string => {
+    return userData?.name || "User";
+  };
+
+  const getUserEmail = (): string => {
+    return userData?.email || "";
+  };
+
+  const getUserPhone = (): string => {
+    return userData?.phone1 || "";
+  };
 
   const handleLogout = async () => {
     const ok = await confirm({
@@ -56,7 +109,17 @@ export default function Profile() {
       confirmText: "Logout",
       destructive: true,
     });
-    if (ok) navigate("/login");
+    if (ok) {
+      localStorage.removeItem("user_data");
+      navigate("/login");
+    }
+  };
+
+  // Navigation handler
+  const goTo = (path: string) => {
+    if (path && path !== "#") {
+      navigate(path);
+    }
   };
 
   return (
@@ -67,17 +130,25 @@ export default function Profile() {
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16 ring-4 ring-background shadow-md">
               <AvatarFallback className="bg-primary text-primary-foreground text-xl font-display font-semibold">
-                AK
+                {getUserInitials()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-display font-semibold text-foreground truncate">
-                Arjun Kapoor
+                {getUserName()}
               </h2>
-              <p className="text-xs text-muted-foreground">Senior Interior Designer</p>
+              <p className="text-xs text-muted-foreground">Employee</p>
               <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3" /> +91 98765 43210</span>
-                <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3" /> arjun@homyns.in</span>
+                {getUserPhone() && (
+                  <span className="inline-flex items-center gap-1">
+                    <Phone className="w-3 h-3" /> {getUserPhone()}
+                  </span>
+                )}
+                {getUserEmail() && (
+                  <span className="inline-flex items-center gap-1">
+                    <Mail className="w-3 h-3" /> {getUserEmail()}
+                  </span>
+                )}
               </div>
             </div>
             <Button
@@ -92,9 +163,67 @@ export default function Profile() {
           </div>
         </Card>
 
-        {/* Account */}
+        {/* Dashboard & Quick Actions */}
         <Section
-          title="Account"
+          title="Quick Actions"
+          items={[
+            { icon: LayoutDashboard, label: "Dashboard", onClick: () => goTo("/") },
+            { icon: FilePlus, label: "Create Quotation", onClick: () => goTo("/create-quotation") },
+            { icon: FileText, label: "Quotation History", onClick: () => goTo("/quotations") },
+            { icon: Users, label: "Clients", onClick: () => goTo("/clients") },
+          ]}
+        />
+
+        {/* Leads & Followups */}
+        <Section
+          title="Leads & Followups"
+          items={[
+            { icon: UserPlus, label: "My Leads", onClick: () => goTo("/my-leads") },
+            { icon: Users, label: "All Leads", onClick: () => goTo("/all-leads") },
+            { icon: PhoneCall, label: "My Today Followup", onClick: () => goTo("/my-today-followup") },
+            { icon: ClipboardList, label: "All Followups", onClick: () => goTo("/all-followups") },
+          ]}
+        />
+
+        {/* Reports */}
+        <Section
+          title="Reports"
+          items={[
+            { icon: Package, label: "Low Raw Material Stock", onClick: () => goTo("/reports/low-stock") },
+            { icon: ClipboardList, label: "Work Order Status", onClick: () => goTo("/reports/work-order-status") },
+          ]}
+        />
+
+        {/* Master */}
+        <Section
+          title="Master"
+          items={[
+            { icon: Users, label: "Employees", onClick: () => goTo("/employees") },
+            { icon: Ruler, label: "Units", onClick: () => goTo("/units") },
+            { icon: Tag, label: "Brands", onClick: () => goTo("/brands") },
+            { icon: Layers, label: "Raw Material Types", onClick: () => goTo("/raw-material-types") },
+            { icon: Layers, label: "Raw Materials", onClick: () => goTo("/raw-materials") },
+            { icon: Package, label: "Categories", onClick: () => goTo("/categories") },
+            { icon: Package, label: "Products", onClick: () => goTo("/products") },
+            { icon: DoorOpen, label: "Rooms", onClick: () => goTo("/rooms") },
+            { icon: Package, label: "Packages", onClick: () => goTo("/packages") },
+            { icon: FileText, label: "Terms & Conditions", onClick: () => goTo("/terms") },
+          ]}
+        />
+
+        {/* Location */}
+        <Section
+          title="Location"
+          items={[
+            { icon: Map, label: "State Master", onClick: () => goTo("/states") },
+            { icon: Building2, label: "City Master", onClick: () => goTo("/cities") },
+            { icon: MapPin, label: "Area Master", onClick: () => goTo("/areas") },
+          ]}
+        />
+
+        {/* Account Settings */}
+        <Section
+          title="Account Settings"
           items={[
             { icon: Pencil, label: "Edit Profile", hint: "Name, photo, contact", onClick: () => navigate("/profile/edit") },
             { icon: KeyRound, label: "Change Password", hint: "Update your login password" },

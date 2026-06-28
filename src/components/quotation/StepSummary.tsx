@@ -1,16 +1,18 @@
+// src/components/quotation/StepSummary.tsx
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Button } from "@/components/ui/button";
-import { Client, Package, Room } from "@/data/quotationData";
+import { Customer } from "@/services/customer.service";
+import { Package as PackageType } from "@/services/package.service";
+import { QuotationRoom } from "@/pages/CreateQuotation";
 import { User, Package as PackageIcon, MapPin, Phone, Mail } from "lucide-react";
 
 interface StepSummaryProps {
-  client: Client | null;
-  selectedPackage: Package | null;
-  rooms: Room[];
+  client: Customer | null;
+  selectedPackage: PackageType | null;
+  rooms: QuotationRoom[];
   subtotal: number;
   discountType: "rs" | "pct";
   setDiscountType: (v: "rs" | "pct") => void;
@@ -42,9 +44,9 @@ export function StepSummary({
             </div>
             {client && (
               <div className="space-y-2.5">
-                <p className="font-semibold text-foreground text-lg">{client.name}</p>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground"><Phone className="w-4 h-4" />{client.phone}</div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground"><Mail className="w-4 h-4" />{client.email}</div>
+                <p className="font-semibold text-foreground text-lg">{client.client_name}</p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground"><Phone className="w-4 h-4" />{client.phone1}</div>
+                {client.email && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Mail className="w-4 h-4" />{client.email}</div>}
                 {client.address && <div className="flex items-center gap-2 text-sm text-muted-foreground"><MapPin className="w-4 h-4" />{client.address}</div>}
               </div>
             )}
@@ -55,11 +57,13 @@ export function StepSummary({
               <div className="w-10 h-10 rounded-xl bg-gold/10 flex items-center justify-center"><PackageIcon className="w-5 h-5 text-gold" /></div>
               <h3 className="font-display font-semibold text-foreground">Selected Package</h3>
             </div>
-            {selectedPackage && (
+            {selectedPackage ? (
               <div>
-                <p className="font-semibold text-foreground text-lg mb-1">{selectedPackage.name} Package</p>
-                <p className="text-sm text-muted-foreground mb-3">{selectedPackage.description}</p>
+                <p className="font-semibold text-foreground text-lg mb-1">{selectedPackage.package_name} Package</p>
+                <p className="text-sm text-muted-foreground mb-3">{selectedPackage.details}</p>
               </div>
+            ) : (
+              <p className="text-muted-foreground">No package selected (custom)</p>
             )}
           </Card>
         </div>
@@ -68,20 +72,19 @@ export function StepSummary({
           <h3 className="font-display font-semibold text-foreground mb-4">Room-wise Cost Breakdown</h3>
           <div className="space-y-4">
             {rooms.map((room) => {
-              const roomTotal = room.items.filter((i) => i.included).reduce((s, i) => s + i.price * i.quantity, 0);
               const included = room.items.filter((i) => i.included);
               if (included.length === 0) return null;
               return (
                 <div key={room.id} className="p-4 rounded-xl bg-secondary/50 border border-border">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-semibold text-foreground">{room.name}</h4>
-                    <span className="font-semibold text-foreground">₹{roomTotal.toLocaleString()}</span>
+                    <h4 className="font-semibold text-foreground">{room.room_name}</h4>
+                    <span className="font-semibold text-foreground">₹{room.room_total.toLocaleString()}</span>
                   </div>
                   <div className="space-y-2">
                     {included.map((item) => (
                       <div key={item.id} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{item.name} × {item.quantity}</span>
-                        <span className="text-foreground">₹{(item.price * item.quantity).toLocaleString()}</span>
+                        <span className="text-muted-foreground">{item.product_name} × {item.qty}</span>
+                        <span className="text-foreground">₹{item.total_price.toLocaleString()}</span>
                       </div>
                     ))}
                   </div>

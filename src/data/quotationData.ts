@@ -1,8 +1,9 @@
+// src/data/quotationData.ts
 export interface Client {
   id: string;
   name: string;
-  email: string;
   phone: string;
+  email: string;
   address?: string;
   company?: string;
 }
@@ -11,186 +12,136 @@ export interface Package {
   id: string;
   name: string;
   description: string;
+  icon: string;
   startingPrice: number;
   features: string[];
-  icon: string;
-}
-
-export interface RoomItem {
-  id: string;
-  name: string;
-  description?: string;
-  size: string;
-  unit: string;
-  price: number;
-  quantity: number;
-  included: boolean;
+  rooms?: string; // Comma-separated room_ids
 }
 
 export interface Room {
   id: string;
   name: string;
   icon: string;
-  items: RoomItem[];
+  items: Item[];
 }
 
-export interface QuotationData {
-  client: Client | null;
-  package: Package | null;
-  rooms: Room[];
-  subtotal: number;
-  tax: number;
-  grandTotal: number;
+export interface Item {
+  id: string;
+  name: string;
+  description?: string;
+  size?: string;
+  unit?: string;
+  price: number;
+  quantity: number;
+  included: boolean;
 }
 
+// Sample data
 export const sampleClients: Client[] = [
-  {
-    id: "1",
-    name: "Priya Sharma",
-    email: "priya.sharma@email.com",
-    phone: "+91 98765 43210",
-    address: "123 Green Park, New Delhi",
-    company: "Sharma Residences",
-  },
-  {
-    id: "2",
-    name: "Rahul Mehta",
-    email: "rahul.mehta@email.com",
-    phone: "+91 87654 32109",
-    address: "456 Juhu Beach Road, Mumbai",
-    company: "Mehta Interiors",
-  },
-  {
-    id: "3",
-    name: "Ananya Patel",
-    email: "ananya.p@email.com",
-    phone: "+91 76543 21098",
-    address: "789 Koramangala, Bangalore",
-  },
-  {
-    id: "4",
-    name: "Vikram Singh",
-    email: "vikram.singh@email.com",
-    phone: "+91 65432 10987",
-    address: "321 Civil Lines, Jaipur",
-    company: "Singh & Associates",
-  },
+  { id: "1", name: "Aarav Sharma", phone: "+91 98765 43210", email: "aarav@example.com", address: "Mumbai, Maharashtra" },
+  { id: "2", name: "Priya Patel", phone: "+91 87654 32109", email: "priya@example.com", address: "Ahmedabad, Gujarat" },
+  { id: "3", name: "Rahul Singh", phone: "+91 76543 21098", email: "rahul@example.com", address: "Delhi" },
 ];
 
 export const packages: Package[] = [
   {
     id: "basic",
     name: "Basic",
-    description: "Essential furniture and fixtures for a comfortable living space",
-    startingPrice: 150000,
-    features: ["Standard Materials", "Basic Finishes", "2 Design Revisions", "30-Day Warranty"],
+    description: "Essential home interior solutions",
     icon: "home",
+    startingPrice: 500000,
+    features: ["Living Room", "Bedroom", "Kitchen"],
+    rooms: "room1,room2,room3"
   },
   {
     id: "regular",
     name: "Regular",
-    description: "Premium quality materials with modern design elements",
-    startingPrice: 350000,
-    features: ["Premium Materials", "Designer Finishes", "5 Design Revisions", "1-Year Warranty"],
+    description: "Premium interiors with modern designs",
     icon: "building",
+    startingPrice: 1000000,
+    features: ["Living Room", "Bedroom", "Kitchen", "Dining Room"],
+    rooms: "room1,room2,room3,room4"
   },
   {
     id: "luxury",
     name: "Luxury",
-    description: "Bespoke designs with imported materials and exclusive finishes",
-    startingPrice: 750000,
-    features: ["Imported Materials", "Custom Finishes", "Unlimited Revisions", "5-Year Warranty"],
+    description: "Ultimate luxury interior experience",
     icon: "crown",
+    startingPrice: 2000000,
+    features: ["Living Room", "Bedroom", "Kitchen", "Dining Room", "Study Room", "Kids Room"],
+    rooms: "room1,room2,room3,room4,room5,room6"
   },
 ];
 
 export const getRoomsByPackage = (packageId: string): Room[] => {
-  const baseRooms: Room[] = [
+  // Mock rooms based on package
+  const allRooms: Room[] = [
     {
-      id: "living-room",
+      id: "room1",
       name: "Living Room",
       icon: "sofa",
       items: [
-        { id: "lr-1", name: "Sofa Set", size: "8x4", unit: "ft", price: 45000, quantity: 1, included: true, description: "3-seater L-shaped sofa" },
-        { id: "lr-2", name: "TV Cabinet", size: "6x2", unit: "ft", price: 25000, quantity: 1, included: true, description: "Wall-mounted entertainment unit" },
-        { id: "lr-3", name: "Center Table", size: "4x2.5", unit: "ft", price: 15000, quantity: 1, included: true, description: "Wooden center table with storage" },
-        { id: "lr-4", name: "Curtains", size: "Standard", unit: "set", price: 8000, quantity: 2, included: true, description: "Blackout curtains with sheers" },
-        { id: "lr-5", name: "Accent Chair", size: "Standard", unit: "pc", price: 18000, quantity: 2, included: false, description: "Designer accent chairs" },
-      ],
+        { id: "item1", name: "Sofa Set", description: "3+1+1 seater", size: "Standard", unit: "Set", price: 45000, quantity: 1, included: true },
+        { id: "item2", name: "Coffee Table", description: "Glass top", size: "120x60x45", unit: "cm", price: 15000, quantity: 1, included: true },
+        { id: "item3", name: "TV Unit", description: "Wall mounted", size: "180x45x40", unit: "cm", price: 25000, quantity: 1, included: true },
+      ]
     },
     {
-      id: "master-bedroom",
-      name: "Master Bedroom",
+      id: "room2",
+      name: "Bedroom",
       icon: "bed",
       items: [
-        { id: "mb-1", name: "King Bed", size: "6x6.5", unit: "ft", price: 55000, quantity: 1, included: true, description: "King size bed with headboard" },
-        { id: "mb-2", name: "Wardrobe", size: "8x8", unit: "ft", price: 65000, quantity: 1, included: true, description: "Sliding door wardrobe" },
-        { id: "mb-3", name: "Side Tables", size: "1.5x1.5", unit: "ft", price: 12000, quantity: 2, included: true, description: "Bedside tables with drawers" },
-        { id: "mb-4", name: "Dresser Unit", size: "4x2", unit: "ft", price: 28000, quantity: 1, included: true, description: "Dressing table with mirror" },
-        { id: "mb-5", name: "TV Unit", size: "5x1.5", unit: "ft", price: 18000, quantity: 1, included: false, description: "Wall-mounted TV panel" },
-      ],
+        { id: "item4", name: "Queen Bed", description: "Upholstered headboard", size: "200x180", unit: "cm", price: 35000, quantity: 1, included: true },
+        { id: "item5", name: "Wardrobe", description: "4-door sliding", size: "240x210x60", unit: "cm", price: 40000, quantity: 1, included: true },
+        { id: "item6", name: "Nightstand", description: "2 drawer", size: "45x45x50", unit: "cm", price: 8000, quantity: 2, included: true },
+      ]
     },
     {
-      id: "kitchen",
+      id: "room3",
       name: "Kitchen",
       icon: "chefHat",
       items: [
-        { id: "k-1", name: "Modular Kitchen", size: "10x8", unit: "ft", price: 185000, quantity: 1, included: true, description: "Complete modular kitchen setup" },
-        { id: "k-2", name: "Chimney", size: "Standard", unit: "pc", price: 25000, quantity: 1, included: true, description: "Auto-clean chimney" },
-        { id: "k-3", name: "Tall Unit", size: "2x7", unit: "ft", price: 35000, quantity: 1, included: true, description: "Pantry storage unit" },
-        { id: "k-4", name: "Breakfast Counter", size: "4x2", unit: "ft", price: 22000, quantity: 1, included: false, description: "Island breakfast counter" },
-      ],
+        { id: "item7", name: "Modular Kitchen", description: "L-shaped", size: "Standard", unit: "Set", price: 80000, quantity: 1, included: true },
+        { id: "item8", name: "Chimney", description: "Auto clean", size: "90cm", unit: "cm", price: 15000, quantity: 1, included: true },
+        { id: "item9", name: "Hob", description: "4 burner", size: "Standard", unit: "Set", price: 12000, quantity: 1, included: true },
+      ]
+    },
+    {
+      id: "room4",
+      name: "Dining Room",
+      icon: "doorOpen",
+      items: [
+        { id: "item10", name: "Dining Table", description: "6-seater", size: "180x90x75", unit: "cm", price: 30000, quantity: 1, included: true },
+        { id: "item11", name: "Dining Chairs", description: "Upholstered", size: "Standard", unit: "Set", price: 12000, quantity: 6, included: true },
+      ]
+    },
+    {
+      id: "room5",
+      name: "Study Room",
+      icon: "briefcase",
+      items: [
+        { id: "item12", name: "Study Table", description: "Wooden", size: "120x60x75", unit: "cm", price: 18000, quantity: 1, included: true },
+        { id: "item13", name: "Bookshelf", description: "5-tier", size: "90x180x30", unit: "cm", price: 22000, quantity: 1, included: true },
+      ]
+    },
+    {
+      id: "room6",
+      name: "Kids Room",
+      icon: "baby",
+      items: [
+        { id: "item14", name: "Kids Bed", description: "Bunk bed", size: "200x120", unit: "cm", price: 28000, quantity: 1, included: true },
+        { id: "item15", name: "Study Desk", description: "With storage", size: "90x50x75", unit: "cm", price: 12000, quantity: 1, included: true },
+      ]
     },
   ];
 
-  if (packageId === "regular" || packageId === "luxury") {
-    baseRooms.push({
-      id: "guest-room",
-      name: "Guest Room",
-      icon: "doorOpen",
-      items: [
-        { id: "gr-1", name: "Queen Bed", size: "5x6", unit: "ft", price: 38000, quantity: 1, included: true, description: "Queen size bed with storage" },
-        { id: "gr-2", name: "Wardrobe", size: "6x7", unit: "ft", price: 45000, quantity: 1, included: true, description: "2-door wardrobe" },
-        { id: "gr-3", name: "Study Table", size: "4x2", unit: "ft", price: 18000, quantity: 1, included: true, description: "Work desk with drawers" },
-      ],
-    });
+  // Filter rooms based on package
+  if (packageId === "basic") {
+    return allRooms.slice(0, 3);
+  } else if (packageId === "regular") {
+    return allRooms.slice(0, 4);
+  } else if (packageId === "luxury") {
+    return allRooms;
   }
-
-  if (packageId === "luxury") {
-    baseRooms.push(
-      {
-        id: "children-bedroom",
-        name: "Children Bedroom",
-        icon: "baby",
-        items: [
-          { id: "cb-1", name: "Bunk Bed", size: "6x3", unit: "ft", price: 42000, quantity: 1, included: true, description: "Colorful bunk bed set" },
-          { id: "cb-2", name: "Study Desk", size: "5x2", unit: "ft", price: 22000, quantity: 1, included: true, description: "Child-friendly study desk" },
-          { id: "cb-3", name: "Wardrobe", size: "5x7", unit: "ft", price: 38000, quantity: 1, included: true, description: "Kids wardrobe with fun design" },
-          { id: "cb-4", name: "Bookshelf", size: "3x5", unit: "ft", price: 15000, quantity: 1, included: true, description: "Open bookshelf unit" },
-        ],
-      },
-      {
-        id: "home-office",
-        name: "Home Office",
-        icon: "briefcase",
-        items: [
-          { id: "ho-1", name: "Executive Desk", size: "6x3", unit: "ft", price: 45000, quantity: 1, included: true, description: "Premium executive desk" },
-          { id: "ho-2", name: "Chair", size: "Standard", unit: "pc", price: 28000, quantity: 1, included: true, description: "Ergonomic office chair" },
-          { id: "ho-3", name: "Bookcase", size: "4x6", unit: "ft", price: 32000, quantity: 1, included: true, description: "Built-in bookcase" },
-          { id: "ho-4", name: "Filing Cabinet", size: "1.5x3", unit: "ft", price: 18000, quantity: 1, included: false, description: "4-drawer filing cabinet" },
-        ],
-      }
-    );
-  }
-
-  // Apply price multipliers based on package
-  const priceMultiplier = packageId === "luxury" ? 1.5 : packageId === "regular" ? 1.2 : 1;
-
-  return baseRooms.map((room) => ({
-    ...room,
-    items: room.items.map((item) => ({
-      ...item,
-      price: Math.round(item.price * priceMultiplier),
-    })),
-  }));
+  return allRooms;
 };

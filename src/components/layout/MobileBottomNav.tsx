@@ -1,80 +1,97 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Home, FileText, Plus, Users, UserCircle } from "lucide-react";
+import { Home, FileText, Plus, Users, UserCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { icon: Home, label: "Home", path: "/" },
   { icon: FileText, label: "Quotes", path: "/quotations" },
-  { icon: null, label: "Create", path: "/create-quotation", center: true },
+  { icon: null, label: "", path: "/create-quotation", center: true },
   { icon: Users, label: "Clients", path: "/clients" },
-  { icon: UserCircle, label: "More", path: "/profile" },
+  { icon: UserCircle, label: "Profile", path: "/profile" },
 ];
 
 export function MobileBottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  const isCreateActive = pathname.startsWith("/create-quotation");
+
   return (
-    <div className="md:hidden fixed bottom-0 inset-x-0 z-40 pointer-events-none">
-      <div className="relative pointer-events-auto">
-        {/* SVG curved background */}
-        <svg
-          viewBox="0 0 400 80"
-          preserveAspectRatio="none"
-          className="absolute inset-x-0 bottom-0 w-full h-[78px] drop-shadow-[0_-8px_20px_rgba(15,23,42,0.12)]"
-          aria-hidden
-        >
-          <path
-            d="M0,16 L150,16 C165,16 170,0 200,0 C230,0 235,16 250,16 L400,16 L400,80 L0,80 Z"
-            fill="hsl(var(--card))"
-            stroke="hsl(var(--border))"
-            strokeWidth="0.5"
-          />
-        </svg>
+    <div className="md:hidden fixed bottom-0 inset-x-0 z-50">
+      <div className="relative mx-3 mb-3 bg-card/90 backdrop-blur-xl border border-border rounded-2xl shadow-2xl">
+        {/* Gradient accent line */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-gradient-to-r from-primary/40 via-primary to-primary/40 rounded-full" />
 
-        {/* Floating + button */}
-        <button
-          onClick={() => navigate("/create-quotation")}
-          aria-label="Create Quotation"
-          className={cn(
-            "absolute left-1/2 -translate-x-1/2 -top-2 w-14 h-14 rounded-full gradient-primary shadow-[0_10px_24px_-6px_hsl(var(--primary)/0.6)] flex items-center justify-center transition-transform active:scale-95",
-            pathname === "/create-quotation" && "scale-105"
-          )}
-        >
-          <Plus className="w-7 h-7 text-primary-foreground" strokeWidth={2.5} />
-        </button>
-
-        {/* Nav row */}
-        <nav className="relative grid grid-cols-5 h-[78px] pt-3 pb-2 safe-bottom">
+        <nav className="flex items-center justify-around h-16 px-2 safe-bottom">
           {items.map((it) => {
             if (it.center) {
               return (
-                <div key={it.path} className="flex items-end justify-center">
-                  <span className="text-[10px] font-medium text-muted-foreground pb-0.5">
-                    {it.label}
-                  </span>
+                <div key={it.path} className="relative -mt-8 flex items-center justify-center">
+                  <button
+                    onClick={() => navigate("/create-quotation/client")}
+                    aria-label="Create Quotation"
+                    className={cn(
+                      "w-14 h-14 rounded-2xl shadow-[0_8px_25px_rgba(99,102,241,0.4)] flex items-center justify-center transition-all duration-300",
+                      "bg-gradient-to-br from-primary to-primary/90 hover:shadow-[0_8px_30px_rgba(99,102,241,0.5)] hover:scale-105 active:scale-95",
+                      isCreateActive && "ring-4 ring-primary/30"
+                    )}
+                  >
+                    <div className="relative">
+                      <Plus className="w-7 h-7 text-white" strokeWidth={3} />
+                      {isCreateActive && (
+                        <Sparkles className="absolute -top-1 -right-3 w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+                      )}
+                    </div>
+                  </button>
                 </div>
               );
             }
+
             const Icon = it.icon!;
+            const isActive = pathname === it.path || 
+              (it.path !== "/" && pathname.startsWith(it.path));
+
             return (
               <NavLink
                 key={it.path}
                 to={it.path}
                 end={it.path === "/"}
-                className={({ isActive }) =>
+                className={({ isActive: navIsActive }) =>
                   cn(
-                    "flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition",
-                    isActive ? "text-primary" : "text-muted-foreground"
+                    "flex flex-col items-center justify-center gap-0.5 py-1 px-2 rounded-xl transition-all duration-200 min-w-[50px]",
+                    isActive || navIsActive
+                      ? "text-primary"
+                      : "text-muted-foreground/70 hover:text-foreground"
                   )
                 }
               >
-                {({ isActive }) => (
-                  <>
-                    <Icon className={cn("w-5 h-5", isActive && "scale-110")} />
-                    <span>{it.label}</span>
-                  </>
-                )}
+                {({ isActive: navIsActive }) => {
+                  const active = isActive || navIsActive;
+                  return (
+                    <>
+                      <div className="relative">
+                        <div className={cn(
+                          "p-2 rounded-xl transition-all duration-200",
+                          active && "bg-primary/10"
+                        )}>
+                          <Icon className={cn(
+                            "w-5 h-5 transition-all duration-200",
+                            active && "scale-110"
+                          )} />
+                        </div>
+                        {active && (
+                          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <span className={cn(
+                        "text-[10px] font-medium transition-all duration-200",
+                        active && "font-semibold"
+                      )}>
+                        {it.label}
+                      </span>
+                    </>
+                  );
+                }}
               </NavLink>
             );
           })}

@@ -135,7 +135,7 @@ export const roomsMaster: RoomMaster[] = [
 ];
 
 export const customers: Customer[] = [
-  { id: "cu1", name: "Mr. Amit Sharma", mobile: "+91 98765 43210", altPhone: "", whatsapp: "+91 98765 43210", email: "amit.sharma@gmail.com", address: "A-12, Sunshine Apartments, Bopal", stateId: "s4", cityId: "c6", areaId: "a8", note: "VIP client" },
+  { id: "cu1", name: "Mr. Amit Sa", mobile: "+91 98765 43210", altPhone: "", whatsapp: "+91 98765 43210", email: "amit.sharma@gmail.com", address: "A-12, Sunshine Apartments, Bopal", stateId: "s4", cityId: "c6", areaId: "a8", note: "VIP client" },
   { id: "cu2", name: "Rahul Mehta", mobile: "+91 87654 32109", whatsapp: "+91 87654 32109", email: "rahul.mehta@email.com", address: "302 Palm Residency", stateId: "s1", cityId: "c1", areaId: "a2" },
   { id: "cu3", name: "Ananya Patel", mobile: "+91 76543 21098", whatsapp: "+91 76543 21098", email: "ananya.p@email.com", address: "B-204, Lotus Heights", stateId: "s2", cityId: "c3", areaId: "a4" },
   { id: "cu4", name: "Vikram Singh", mobile: "+91 65432 10987", whatsapp: "+91 65432 10987", email: "vikram.singh@email.com", address: "44 Civil Lines", stateId: "s6", cityId: "c9", areaId: "a9" },

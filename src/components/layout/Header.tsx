@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/lib/confirm";
 import { notifications } from "@/data/mockData";
+import { useState, useEffect } from "react";
 
 interface HeaderProps {
   title: string;
@@ -16,10 +17,47 @@ interface HeaderProps {
   backTo?: string;
 }
 
+interface UserData {
+  emp_id: string;
+  name: string;
+  login_code: string;
+  email: string;
+  phone1: string;
+  phone2: string;
+  profile_image: string | null;
+  access_pages: string[];
+}
+
 export function Header({ title, subtitle, backTo }: HeaderProps) {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [companyData, setCompanyData] = useState<any>(null);
   const unread = notifications.filter((n) => n.unread).length;
+
+  useEffect(() => {
+    // Get user data from localStorage
+    try {
+      const userRaw = localStorage.getItem("user_data");
+      if (userRaw) {
+        const parsed = JSON.parse(userRaw);
+        setUserData(parsed);
+      }
+    } catch (error) {
+      console.error("Error parsing user_data:", error);
+    }
+
+    // Get company data from localStorage
+    try {
+      const companyRaw = localStorage.getItem("company_data");
+      if (companyRaw) {
+        const parsed = JSON.parse(companyRaw);
+        setCompanyData(parsed);
+      }
+    } catch (error) {
+      console.error("Error parsing company_data:", error);
+    }
+  }, []);
 
   const handleLogout = async () => {
     const ok = await confirm({
@@ -28,7 +66,38 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
       confirmText: "Logout",
       destructive: true,
     });
-    if (ok) navigate("/login");
+    if (ok) {
+      // Clear user data on logout
+      localStorage.removeItem("user_data");
+      navigate("/login");
+    }
+  };
+
+  // Get user initials for avatar
+  const getUserInitials = (): string => {
+    if (!userData?.name) return "U";
+    const nameParts = userData.name.trim().split(" ");
+    if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase();
+    return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+  };
+
+  // Get user display name
+  const getDisplayName = (): string => {
+    return userData?.name || "User";
+  };
+
+  // Get user role/designation
+  const getUserRole = (): string => {
+    // You can customize this based on your role logic
+    return "Employee";
+  };
+
+  // Get company name for logo
+  const getCompanyInitial = (): string => {
+    if (companyData?.company_name) {
+      return companyData.company_name.charAt(0).toUpperCase();
+    }
+    return "H";
   };
 
   return (
@@ -40,7 +109,7 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
           </Button>
         ) : (
           <div className="md:hidden w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <span className="text-primary-foreground font-display font-bold">H</span>
+            <span className="text-primary-foreground font-display font-bold">{getCompanyInitial()}</span>
           </div>
         )}
         <div className="min-w-0">
@@ -50,7 +119,7 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1 md:gap-3">
-        <Popover>
+        {/* <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="relative rounded-xl">
               <Bell className="w-5 h-5 text-muted-foreground" />
@@ -81,27 +150,34 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
               ))}
             </div>
           </PopoverContent>
-        </Popover>
+        </Popover> */}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 px-2 md:px-3 py-1.5 rounded-xl hover:bg-secondary transition">
               <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">AK</AvatarFallback>
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                  {getUserInitials()}
+                </AvatarFallback>
               </Avatar>
               <div className="hidden lg:flex flex-col items-start">
-                <span className="text-sm font-semibold text-foreground leading-tight">Arjun Kapoor</span>
-                <span className="text-xs text-muted-foreground">Designer</span>
+                <span className="text-sm font-semibold text-foreground leading-tight">{getDisplayName()}</span>
+                <span className="text-xs text-muted-foreground">{getUserRole()}</span>
               </div>
               <ChevronDown className="w-4 h-4 text-muted-foreground hidden lg:block" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 rounded-xl">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold">{getDisplayName()}</span>
+                <span className="text-xs text-muted-foreground font-normal">{userData?.email || ""}</span>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/profile")} className="cursor-pointer">
+            {/* <DropdownMenuItem onClick={() => navigate("/profile")} className="cursor-pointer">
               <UserCircle className="w-4 h-4 mr-2" /> Profile
-            </DropdownMenuItem>
+            </DropdownMenuItem> */}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
               <LogOut className="w-4 h-4 mr-2" /> Logout

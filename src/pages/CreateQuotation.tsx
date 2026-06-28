@@ -1,4 +1,6 @@
-import { useState, useMemo } from "react";
+// src/pages/CreateQuotation.tsx
+import { useState, useEffect } from "react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,169 +19,116 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { StepClientSelection } from "@/components/quotation/StepClientSelection";
-import { StepPackageSelection } from "@/components/quotation/StepPackageSelection";
-import { StepRoomSelection } from "@/components/quotation/StepRoomSelection";
-import { StepItemSelection } from "@/components/quotation/StepItemSelection";
-import { StepSummary } from "@/components/quotation/StepSummary";
-import { StepGenerate } from "@/components/quotation/StepGenerate";
-import {
-  Client,
-  Package as PackageType,
-  Room,
-  sampleClients,
-  packages,
-  getRoomsByPackage,
-} from "@/data/quotationData";
+import { toast } from "@/hooks/use-toast";
 
 const steps = [
-  { id: 1, name: "Client", icon: User },
-  { id: 2, name: "Package", icon: Package },
-  { id: 3, name: "Rooms", icon: Home },
-  { id: 4, name: "Items", icon: ClipboardList },
-  { id: 5, name: "Summary", icon: FileCheck },
-  { id: 6, name: "Generate", icon: Download },
+  { id: 1, name: "Client", icon: User, path: "client" },
+  { id: 2, name: "Package", icon: Package, path: "package" },
+  { id: 3, name: "Rooms", icon: Home, path: "rooms" },
+  { id: 4, name: "Items", icon: ClipboardList, path: "items" },
+  { id: 5, name: "Summary", icon: FileCheck, path: "summary" },
+  { id: 6, name: "Generate", icon: Download, path: "generate" },
 ];
 
+// ─── Default Data ──────────────────────────────────────────────────────────
+const defaultQuotationData = {
+  selectedClient: null,
+  selectedPackage: null,
+  rooms: [],
+  expandedRooms: [],
+  discountType: "rs",
+  discountValue: 0,
+  withGst: true,
+  specialInstructions: "",
+};
+
+const STORAGE_KEY = 'quotation_data';
+// ─── Quotation data management ─────────────────────────────────────────────
+export const getQuotationData = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const data = raw ? JSON.parse(raw) : null;
+    console.log('📦 getQuotationData:', data);
+    return data;
+  } catch {
+    console.error('Failed to parse quotation data');
+    return null;
+  }
+};
+
+export const saveQuotationData = (data: any) => {
+  try {
+    const existing = getQuotationData() || {};
+    const merged = { ...existing, ...data };
+    console.log('💾 saveQuotationData:', merged);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+  } catch (error) {
+    console.error('Failed to save quotation data:', error);
+  }
+};
+
+// ─── Clear ALL quotation data ─────────────────────────────────────────────
+export const clearQuotationData = () => {
+  console.log('🗑️ Clearing quotation data');
+  localStorage.removeItem(STORAGE_KEY);
+};
+
 export default function CreateQuotation() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [selectedPackage, setSelectedPackage] = useState<PackageType | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [expandedRooms, setExpandedRooms] = useState<string[]>([]);
-  const [discountType, setDiscountType] = useState<"rs" | "pct">("rs");
-  const [discountValue, setDiscountValue] = useState(0);
-  const [withGst, setWithGst] = useState(true);
-  const [specialInstructions, setSpecialInstructions] = useState("");
 
-  const handlePackageSelect = (pkg: PackageType) => {
-    setSelectedPackage(pkg);
-    const newRooms = getRoomsByPackage(pkg.id);
-    setRooms(newRooms);
-    setExpandedRooms([newRooms[0]?.id || ""]);
+  // Get current step from URL
+  useEffect(() => {
+    const path = location.pathname.split("/").pop();
+    const stepIndex = steps.findIndex((s) => s.path === path);
+    if (stepIndex !== -1) {
+      setCurrentStep(stepIndex + 1);
+    } else {
+      // If no step in URL, navigate to client
+      navigate("client", { replace: true });
+    }
+  }, [location.pathname]);
+
+  const goToStep = (step: number) => {
+    const path = steps[step - 1]?.path;
+    if (path) {
+      navigate(`/create-quotation/${path}`);
+    }
   };
-
-  const updateRoomItem = (
-    roomId: string,
-    itemId: string,
-    updates: Partial<{ quantity: number; included: boolean; price: number; remark: string }>
-  ) => {
-    setRooms((prev) =>
-      prev.map((room) =>
-        room.id === roomId
-          ? {
-              ...room,
-              items: room.items.map((item) =>
-                item.id === itemId ? { ...item, ...updates } : item
-              ),
-            }
-          : room
-      )
-    );
-  };
-
-  const { subtotal, discountAmount, tax, grandTotal } = useMemo(() => {
-    const sub = rooms.reduce(
-      (acc, room) =>
-        acc +
-        room.items
-          .filter((item) => item.included)
-          .reduce((sum, item) => sum + item.price * item.quantity, 0),
-      0
-    );
-    const disc = discountType === "pct" ? (sub * discountValue) / 100 : discountValue;
-    const afterDisc = Math.max(0, sub - disc);
-    const taxAmount = withGst ? afterDisc * 0.18 : 0;
-    return {
-      subtotal: sub,
-      discountAmount: disc,
-      tax: taxAmount,
-      grandTotal: afterDisc + taxAmount,
-    };
-  }, [rooms, discountType, discountValue, withGst]);
 
   const canProceed = () => {
+    const data = getQuotationData();
     switch (currentStep) {
       case 1:
-        return selectedClient !== null;
+        return data.selectedClient !== null;
       case 2:
-        return selectedPackage !== null;
+        return data.selectedPackage !== null;
       case 3:
-        return rooms.length > 0;
+        return data.rooms.length > 0;
       case 4:
-        return rooms.some((r) => r.items.some((i) => i.included));
+        return data.rooms.some((r: any) => r.items?.some((i: any) => i.included));
       default:
         return true;
     }
   };
 
-  const renderStep = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <StepClientSelection
-            clients={sampleClients}
-            selectedClient={selectedClient}
-            onSelectClient={setSelectedClient}
-          />
-        );
-      case 2:
-        return (
-          <StepPackageSelection
-            packages={packages}
-            selectedPackage={selectedPackage}
-            onSelectPackage={handlePackageSelect}
-          />
-        );
-      case 3:
-        return (
-          <StepRoomSelection
-            rooms={rooms}
-            expandedRooms={expandedRooms}
-            setExpandedRooms={setExpandedRooms}
-          />
-        );
-      case 4:
-        return (
-          <StepItemSelection
-            rooms={rooms}
-            expandedRooms={expandedRooms}
-            setExpandedRooms={setExpandedRooms}
-            updateRoomItem={updateRoomItem}
-          />
-        );
-      case 5:
-        return (
-          <StepSummary
-            client={selectedClient}
-            selectedPackage={selectedPackage}
-            rooms={rooms}
-            subtotal={subtotal}
-            discountType={discountType}
-            setDiscountType={setDiscountType}
-            discountValue={discountValue}
-            setDiscountValue={setDiscountValue}
-            withGst={withGst}
-            setWithGst={setWithGst}
-            specialInstructions={specialInstructions}
-            setSpecialInstructions={setSpecialInstructions}
-            discountAmount={discountAmount}
-            tax={tax}
-            grandTotal={grandTotal}
-          />
-        );
-      case 6:
-        return (
-          <StepGenerate
-            client={selectedClient}
-            selectedPackage={selectedPackage}
-            grandTotal={grandTotal}
-          />
-        );
-      default:
-        return null;
+  const handleNext = () => {
+    if (!canProceed()) {
+      toast({ title: "Please complete this step first", variant: "destructive" });
+      return;
     }
+    const nextStep = Math.min(currentStep + 1, 6);
+    goToStep(nextStep);
   };
+
+  const handlePrevious = () => {
+    const prevStep = Math.max(currentStep - 1, 1);
+    goToStep(prevStep);
+  };
+
+  // Check if we're on the summary page (step 5)
+  const isSummaryStep = currentStep === 5;
 
   return (
     <MainLayout
@@ -198,7 +147,10 @@ export default function CreateQuotation() {
                   index < steps.length - 1 && "flex-1"
                 )}
               >
-                <div className="flex flex-col items-center">
+                <div
+                  className="flex flex-col items-center cursor-pointer"
+                  onClick={() => goToStep(step.id)}
+                >
                   <div
                     className={cn(
                       "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300",
@@ -206,7 +158,7 @@ export default function CreateQuotation() {
                         ? "bg-primary text-primary-foreground shadow-lg scale-110"
                         : currentStep > step.id
                         ? "bg-success text-success-foreground"
-                        : "bg-secondary text-muted-foreground"
+                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
                     )}
                   >
                     {currentStep > step.id ? (
@@ -245,47 +197,50 @@ export default function CreateQuotation() {
           />
         </Card>
 
-        {/* Step Content */}
-        <div className="mb-6">{renderStep()}</div>
+        {/* Step Content - Outlet renders the child route */}
+        <div className="mb-6">
+          <Outlet />
+        </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1))}
-            disabled={currentStep === 1}
-            className="gap-2"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Previous
-          </Button>
-
-          {currentStep < 6 ? (
+        {/* Navigation - Hide on Summary page */}
+        {!isSummaryStep && (
+          <div className="flex items-center justify-between">
             <Button
-              onClick={() => setCurrentStep((prev) => Math.min(6, prev + 1))}
-              disabled={!canProceed()}
+              variant="outline"
+              onClick={handlePrevious}
+              disabled={currentStep === 1}
               className="gap-2"
             >
-              Next Step
-              <ChevronRight className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" />
+              Previous
             </Button>
-          ) : (
-            <div className="flex gap-3">
-              <Button variant="outline" className="gap-2">
-                <Download className="w-4 h-4" />
-                Download PDF
+
+            {currentStep < 6 ? (
+              <Button
+                onClick={handleNext}
+                className="gap-2"
+              >
+                Next Step
+                <ChevronRight className="w-4 h-4" />
               </Button>
-              <Button variant="outline" className="gap-2">
-                <Mail className="w-4 h-4" />
-                Email
-              </Button>
-              <Button className="gap-2 bg-success hover:bg-success/90">
-                <MessageCircle className="w-4 h-4" />
-                WhatsApp
-              </Button>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="flex gap-3">
+                <Button variant="outline" className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </Button>
+                <Button variant="outline" className="gap-2">
+                  <Mail className="w-4 h-4" />
+                  Email
+                </Button>
+                <Button className="gap-2 bg-success hover:bg-success/90">
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </MainLayout>
   );
