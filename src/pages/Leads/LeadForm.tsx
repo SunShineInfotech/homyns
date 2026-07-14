@@ -1,6 +1,6 @@
 // src/pages/Leads/LeadForm.tsx
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,7 +23,21 @@ import { areaService, Area } from "@/services/area.service";
 import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
 import { employeeService, Employee } from "@/services/employee.service";
-import { ArrowLeft, Save, Loader2, User, Phone, Mail, MapPin, Flag, Users, DollarSign, FileText, Plus } from "lucide-react";
+import { projectTypeService, ProjectType } from "@/services/project-type.service";
+import {
+  ArrowLeft,
+  Save,
+  Loader2,
+  User,
+  Phone,
+  Mail,
+  MapPin,
+  FileText,
+  Plus,
+  Building2,
+  Home,
+  DollarSign,
+} from "lucide-react";
 
 const EMPTY_FORM: Partial<Lead> = {
   lead_name: "",
@@ -40,15 +54,23 @@ const EMPTY_FORM: Partial<Lead> = {
   budget: 0,
   assigned_to: "",
   status: "",
+  project_name: "",
+  house_number: "",
+  project_type_id: "",
 };
 
 export default function LeadForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const isEditMode = !!id;
   const isViewMode = window.location.pathname.includes("/view/");
 
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Get the return path from location state or use default
+  const from = (location.state as any)?.from || "/all-leads";
+  const returnPath = from || "/all-leads";
 
   const [formData, setFormData] = useState<Partial<Lead>>(EMPTY_FORM);
   const [loading, setLoading] = useState(isEditMode);
@@ -62,6 +84,7 @@ export default function LeadForm() {
   const [sources, setSources] = useState<LeadSource[]>([]);
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [projectTypes, setProjectTypes] = useState<ProjectType[]>([]);
   const [loadingMasters, setLoadingMasters] = useState(true);
 
   // Add new dialogs
@@ -70,6 +93,7 @@ export default function LeadForm() {
   const [addAreaDialog, setAddAreaDialog] = useState(false);
   const [addSourceDialog, setAddSourceDialog] = useState(false);
   const [addStatusDialog, setAddStatusDialog] = useState(false);
+  const [addProjectTypeDialog, setAddProjectTypeDialog] = useState(false);
 
   const [newStateName, setNewStateName] = useState("");
   const [newCityName, setNewCityName] = useState("");
@@ -78,6 +102,7 @@ export default function LeadForm() {
   const [newAreaCityId, setNewAreaCityId] = useState("");
   const [newSourceName, setNewSourceName] = useState("");
   const [newStatusName, setNewStatusName] = useState("");
+  const [newProjectTypeName, setNewProjectTypeName] = useState("");
   const [addingNew, setAddingNew] = useState(false);
 
   const getCompanyId = (): string => {
@@ -107,13 +132,14 @@ export default function LeadForm() {
           return;
         }
 
-        const [statesRes, citiesRes, areasRes, sourcesRes, statusesRes, employeesRes] = await Promise.all([
+        const [statesRes, citiesRes, areasRes, sourcesRes, statusesRes, employeesRes, projectTypesRes] = await Promise.all([
           stateService.getStates(companyId),
           cityService.getCities(companyId),
           areaService.getAreas(companyId),
           leadSourceService.getLeadSources(companyId),
           leadStatusService.getLeadStatuses(companyId),
           employeeService.getEmployees(companyId),
+          projectTypeService.getProjectTypes(companyId),
         ]);
 
         if (statesRes.status === "success") setStates(statesRes.data || []);
@@ -122,6 +148,7 @@ export default function LeadForm() {
         if (sourcesRes.status === "success") setSources(sourcesRes.data || []);
         if (statusesRes.status === "success") setStatuses(statusesRes.data || []);
         if (employeesRes.status === "success") setEmployees(employeesRes.data || []);
+        if (projectTypesRes.status === "success") setProjectTypes(projectTypesRes.data || []);
 
         // Auto-select first status if available
         if (!isEditMode && statusesRes.data?.length > 0) {
@@ -147,18 +174,18 @@ export default function LeadForm() {
             setFormData(res.data);
           } else {
             toast({ title: "Error", description: res.message || "Failed to fetch lead", variant: "destructive" });
-            navigate("/all-leads");
+            navigate(returnPath);
           }
         } catch (e: any) {
           toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
-          navigate("/all-leads");
+          navigate(returnPath);
         } finally {
           setLoading(false);
         }
       };
       fetchLead();
     }
-  }, [id, isEditMode, navigate]);
+  }, [id, isEditMode, navigate, returnPath]);
 
   // Add handlers
   const handleAddState = async () => {
@@ -330,6 +357,39 @@ export default function LeadForm() {
     }
   };
 
+  const handleAddProjectType = async () => {
+    if (!newProjectTypeName.trim()) {
+      toast({ title: "Error", description: "Project type name is required", variant: "destructive" });
+      return;
+    }
+    setAddingNew(true);
+    try {
+      const res = await projectTypeService.addProjectType({
+        company_id: getCompanyId(),
+        project_type_name: newProjectTypeName.trim(),
+      });
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Project type added successfully" });
+        setNewProjectTypeName("");
+        setAddProjectTypeDialog(false);
+        const updatedRes = await projectTypeService.getProjectTypes(getCompanyId());
+        if (updatedRes.status === "success" && updatedRes.data) {
+          setProjectTypes(updatedRes.data);
+          const newType = updatedRes.data.find(p => p.project_type_name === newProjectTypeName.trim());
+          if (newType?.project_type_id) {
+            setFormData(p => ({ ...p, project_type_id: newType.project_type_id }));
+          }
+        }
+      } else {
+        toast({ title: "Error", description: res.message || "Failed to add project type", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+    } finally {
+      setAddingNew(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -349,7 +409,7 @@ export default function LeadForm() {
     try {
       const companyId = getCompanyId();
       const empId = getEmployeeId();
-      
+
       const payload = {
         company_id: companyId,
         lead_name: formData.lead_name.trim(),
@@ -366,6 +426,9 @@ export default function LeadForm() {
         budget: formData.budget || 0,
         assigned_to: formData.assigned_to || empId,
         status: formData.status || "",
+        project_name: formData.project_name || "",
+        house_number: formData.house_number || "",
+        project_type_id: formData.project_type_id || "",
       };
 
       let res;
@@ -377,7 +440,8 @@ export default function LeadForm() {
 
       if (res.status === "success") {
         toast({ title: "Success", description: isEditMode ? "Lead updated successfully" : "Lead added successfully" });
-        navigate("/all-leads");
+        // Navigate back to the page we came from
+        navigate(returnPath);
       } else {
         toast({ title: "Error", description: res.message || "Operation failed", variant: "destructive" });
       }
@@ -388,7 +452,9 @@ export default function LeadForm() {
     }
   };
 
-  const handleCancel = () => navigate("/all-leads");
+  const handleCancel = () => {
+    navigate(returnPath);
+  };
 
   if (loading || loadingMasters) {
     return (
@@ -424,6 +490,11 @@ export default function LeadForm() {
   const statusOptions = [
     ...statuses.map(s => ({ value: s.status_id || "", label: s.status_name })),
     { value: "__add_new__", label: "+ Add New Status" },
+  ];
+
+  const projectTypeOptions = [
+    ...projectTypes.map(p => ({ value: p.project_type_id || "", label: p.project_type_name })),
+    { value: "__add_new__", label: "+ Add New Project Type" },
   ];
 
   const employeeOptions = employees.map(e => ({ value: e.emp_id || "", label: e.name || e.emp_name || "" }));
@@ -469,10 +540,30 @@ export default function LeadForm() {
     setFormData(p => ({ ...p, status: value }));
   };
 
+  const handleProjectTypeSelect = (value: string) => {
+    if (value === "__add_new__") {
+      setAddProjectTypeDialog(true);
+      return;
+    }
+    setFormData(p => ({ ...p, project_type_id: value }));
+  };
+
+  // Determine the back button label based on where we came from
+  const getBackLabel = () => {
+    if (returnPath === "/my-leads") return "Back to My Leads";
+    if (returnPath === "/all-leads") return "Back to All Leads";
+    return "Back to Leads";
+  };
+
   return (
     <MainLayout title={isEditMode ? "Edit Lead" : "Add Lead"} subtitle={isEditMode ? "Update lead information" : "Add new lead"}>
       <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      
+        {!isViewMode && (
+          <Button variant="outline" className="gap-2 rounded-xl mb-4" onClick={handleCancel}>
+            <ArrowLeft className="h-4 w-4" /> {getBackLabel()}
+          </Button>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-card rounded-2xl border p-6 space-y-4">
             <h3 className="text-base font-semibold border-b pb-3 flex items-center gap-2">
@@ -545,6 +636,51 @@ export default function LeadForm() {
                   onChange={(e) => setFormData(p => ({ ...p, email: e.target.value }))}
                   className="h-11 rounded-xl pl-10"
                   placeholder="Enter email address"
+                  disabled={isViewMode}
+                />
+              </div>
+            </div>
+
+            {/* Project Name, House Number, Project Type */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="project_name">Project Name</Label>
+                <div className="relative mt-1.5">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="project_name"
+                    value={formData.project_name || ""}
+                    onChange={(e) => setFormData(p => ({ ...p, project_name: e.target.value }))}
+                    className="h-11 rounded-xl pl-10"
+                    placeholder="Enter project name"
+                    disabled={isViewMode}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="house_number">House Number</Label>
+                <div className="relative mt-1.5">
+                  <Home className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="house_number"
+                    value={formData.house_number || ""}
+                    onChange={(e) => setFormData(p => ({ ...p, house_number: e.target.value }))}
+                    className="h-11 rounded-xl pl-10"
+                    placeholder="Enter house number"
+                    disabled={isViewMode}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label>Project Type</Label>
+              <div className="mt-1.5">
+                <SearchableSelect
+                  options={projectTypeOptions}
+                  value={formData.project_type_id || ""}
+                  onChange={handleProjectTypeSelect}
+                  placeholder="Select project type..."
                   disabled={isViewMode}
                 />
               </div>
@@ -654,6 +790,7 @@ export default function LeadForm() {
                     className="h-11 rounded-xl pl-10"
                     placeholder="Enter budget"
                     min="0"
+                    step="0.01"
                     disabled={isViewMode}
                   />
                 </div>
@@ -700,6 +837,12 @@ export default function LeadForm() {
                 Cancel
               </Button>
             </div>
+          )}
+
+          {isViewMode && (
+            <Button type="button" className="rounded-xl h-11 px-6" onClick={handleCancel}>
+              {getBackLabel()}
+            </Button>
           )}
         </form>
       </div>
@@ -869,6 +1012,36 @@ export default function LeadForm() {
             </Button>
             <Button className="rounded-xl h-11 gap-2" onClick={handleAddStatus} disabled={addingNew}>
               {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add Status"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Project Type Dialog */}
+      <Dialog open={addProjectTypeDialog} onOpenChange={setAddProjectTypeDialog}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add New Project Type</DialogTitle>
+            <DialogDescription>Enter the name for the new project type.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="newProjectTypeName">Project Type Name</Label>
+            <Input
+              id="newProjectTypeName"
+              value={newProjectTypeName}
+              onChange={(e) => setNewProjectTypeName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddProjectType(); } }}
+              className="h-11 rounded-xl mt-1.5"
+              placeholder="e.g. Residential, Commercial, etc."
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddProjectTypeDialog(false)} disabled={addingNew}>
+              Cancel
+            </Button>
+            <Button className="rounded-xl h-11 gap-2" onClick={handleAddProjectType} disabled={addingNew}>
+              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add Project Type"}
             </Button>
           </DialogFooter>
         </DialogContent>

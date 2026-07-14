@@ -1,20 +1,83 @@
+// src/components/layout/MobileBottomNav.tsx
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, FileText, Plus, Users, UserCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
 
-const items = [
-  { icon: Home, label: "Home", path: "/" },
-  { icon: FileText, label: "Quotes", path: "/quotations" },
-  { icon: null, label: "", path: "/create-quotation", center: true },
-  { icon: Users, label: "Clients", path: "/clients" },
-  { icon: UserCircle, label: "Profile", path: "/profile" },
+// Define all navigation items with permissions
+const ALL_ITEMS = [
+  { icon: Home, label: "Home", path: "/", permission: "dashboard" },
+  { icon: FileText, label: "Quotes", path: "/quotations", permission: "quotations" },
+  { icon: null, label: "", path: "/create-quotation", center: true, permission: "create-quotation" },
+  { icon: Users, label: "Clients", path: "/clients", permission: "clients" },
+  { icon: UserCircle, label: "Profile", path: "/profile", permission: "profile" },
 ];
+
+// Helper function to safely get permissions array
+const getPermissionsArray = (accessPages: any): string[] => {
+  if (!accessPages) return [];
+  if (Array.isArray(accessPages)) return accessPages.filter(Boolean);
+  if (typeof accessPages === 'string') return accessPages.split(',').map((p: string) => p.trim()).filter(Boolean);
+  return [];
+};
 
 export function MobileBottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  const [navItems, setNavItems] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load user permissions
+  useEffect(() => {
+    const loadPermissions = () => {
+      try {
+        const userDataStr = localStorage.getItem("user_data");
+        if (userDataStr) {
+          const userData = JSON.parse(userDataStr);
+          const perms = getPermissionsArray(userData.access_pages);
+          setUserPermissions(perms);
+        } else {
+          setUserPermissions([]);
+        }
+      } catch (error) {
+        console.error("Error loading user permissions:", error);
+        setUserPermissions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPermissions();
+  }, []);
+
+  // Filter nav items based on permissions
+  useEffect(() => {
+    // Profile is always accessible
+    const filteredItems = ALL_ITEMS.filter(item => {
+      // Profile always shows
+      if (item.permission === "profile") return true;
+      // If no permissions set, only show profile
+      if (userPermissions.length === 0) return false;
+      // Check if user has permission for this item
+      return userPermissions.includes(item.permission);
+    });
+
+    setNavItems(filteredItems);
+  }, [userPermissions]);
 
   const isCreateActive = pathname.startsWith("/create-quotation");
+
+  // Don't show anything if loading
+  if (isLoading) {
+    return null;
+  }
+
+  // Don't show nav if only profile is accessible (or no items)
+  const hasNavigationItems = navItems.some(item => !item.center && item.permission !== "profile");
+  if (!hasNavigationItems && navItems.length <= 1) {
+    return null;
+  }
 
   return (
     <div className="md:hidden fixed bottom-0 inset-x-0 z-50">
@@ -23,7 +86,7 @@ export function MobileBottomNav() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-16 h-1 bg-gradient-to-r from-primary/40 via-primary to-primary/40 rounded-full" />
 
         <nav className="flex items-center justify-around h-16 px-2 safe-bottom">
-          {items.map((it) => {
+          {navItems.map((it) => {
             if (it.center) {
               return (
                 <div key={it.path} className="relative -mt-8 flex items-center justify-center">

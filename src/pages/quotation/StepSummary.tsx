@@ -93,26 +93,44 @@ export default function StepSummary() {
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [expandedRooms, setExpandedRooms] = useState<string[]>([]);
+  const [roomsData, setRoomsData] = useState<any[]>([]);
 
   // ── Confirmation Dialog ────────────────────────────────────────────────
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
-  // src/pages/quotation/StepSummary.tsx - Add debug logging
-
   const quotationData = useMemo(() => {
     const data = getQuotationData();
-    console.log("📊 StepSummary - Retrieved data:", {
-      rooms: data?.rooms,
-      roomsCount: data?.rooms?.length,
-      selectedClient: data?.selectedClient,
-      selectedPackage: data?.selectedPackage,
-      discountType: data?.discountType,
-      discountValue: data?.discountValue,
-      gstPercent: data?.gstPercent,
-    });
+    console.log("📊 StepSummary - Retrieved data:", data);
     return data;
   }, []);
-  const { selectedClient, selectedPackage, rooms } = quotationData || {};
+
+  const { selectedClient, selectedPackage } = quotationData || {};
+
+  // Extract rooms from the saved data - handle both formats
+  useEffect(() => {
+    const data = getQuotationData();
+    if (data) {
+      // Check if rooms exist in the data
+      let rooms = data.rooms || [];
+      
+      // If rooms is an array, filter out rooms that are not selected
+      // but keep the ones that are selected (or all if no selected flag)
+      if (Array.isArray(rooms) && rooms.length > 0) {
+        // Check if rooms have a 'selected' flag
+        const hasSelectedFlag = rooms.some((room: any) => room.selected !== undefined);
+        if (hasSelectedFlag) {
+          // Filter to only selected rooms
+          rooms = rooms.filter((room: any) => room.selected !== false);
+        }
+        setRoomsData(rooms);
+        
+        // Expand first room by default
+        if (rooms.length > 0) {
+          setExpandedRooms([rooms[0].id]);
+        }
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (quotationData?.discountType)
@@ -123,18 +141,15 @@ export default function StepSummary() {
       setGstPercent(quotationData.gstPercent);
     if (quotationData?.specialInstructions)
       setSpecialInstructions(quotationData.specialInstructions);
-    // Expand first room by default
-    if (rooms && rooms.length > 0) setExpandedRooms([rooms[0].id]);
   }, []);
 
   // ── Totals ──────────────────────────────────────────────────────────────
-  // ── Totals ──────────────────────────────────────────────────────────────
   const { subtotal, discountAmount, afterDiscount, taxAmount, grandTotal } =
     useMemo(() => {
-      console.log("🧮 Calculating totals from rooms:", rooms);
+      console.log("🧮 Calculating totals from roomsData:", roomsData);
 
       const sub =
-        rooms?.reduce(
+        roomsData?.reduce(
           (acc: number, room: any) =>
             acc +
             (room.items
@@ -150,14 +165,6 @@ export default function StepSummary() {
       const after = Math.max(0, sub - disc);
       const tax = (after * (gstPercent || 0)) / 100;
 
-      console.log("💰 Totals:", {
-        sub,
-        disc,
-        after,
-        tax,
-        grandTotal: after + tax,
-      });
-
       return {
         subtotal: sub,
         discountAmount: disc,
@@ -165,8 +172,8 @@ export default function StepSummary() {
         taxAmount: tax,
         grandTotal: after + tax,
       };
-    }, [rooms, discountType, discountValue, gstPercent]);
-    
+    }, [roomsData, discountType, discountValue, gstPercent]);
+
   const toggleRoom = (id: string) =>
     setExpandedRooms((prev) =>
       prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
@@ -193,7 +200,7 @@ export default function StepSummary() {
       });
       return;
     }
-    if (!rooms || rooms.length === 0) {
+    if (!roomsData || roomsData.length === 0) {
       toast({
         title: "No items",
         description: "Please add at least one item.",
@@ -203,7 +210,7 @@ export default function StepSummary() {
     }
 
     // Check if any items are included
-    const hasIncludedItems = rooms.some((room: any) =>
+    const hasIncludedItems = roomsData.some((room: any) =>
       room.items?.some((i: any) => i.included),
     );
     if (!hasIncludedItems) {
@@ -243,8 +250,8 @@ export default function StepSummary() {
         }
       })();
 
-      // Build rooms payload
-      const roomsPayload = rooms
+      // Build rooms payload - use roomsData directly
+      const roomsPayload = roomsData
         .map((room: any) => {
           const includedItems =
             room.items?.filter((i: any) => i.included) || [];
@@ -266,8 +273,8 @@ export default function StepSummary() {
             return {
               product_id: item.product_id,
               is_special: item.is_special ? 1 : 0,
-              qty_type: item.qty_type,
-              qty: item.quantity,
+              qty_type: item.qty_type || "Fixed",
+              qty: item.quantity || 1,
               height: item.height || 0,
               width: item.width || 0,
               depth: item.depth || 0,
@@ -357,7 +364,7 @@ export default function StepSummary() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   const hasItems =
-    rooms?.some((room: any) => room.items?.some((i: any) => i.included)) ??
+    roomsData?.some((room: any) => room.items?.some((i: any) => i.included)) ??
     false;
 
   return (
@@ -436,9 +443,9 @@ export default function StepSummary() {
             <h3 className="font-semibold text-foreground mb-3">
               Room-wise Cost Breakdown
             </h3>
-            {rooms && rooms.length > 0 ? (
+            {roomsData && roomsData.length > 0 ? (
               <div className="space-y-2">
-                {rooms.map((room: any) => {
+                {roomsData.map((room: any) => {
                   const included =
                     room.items?.filter((i: any) => i.included) || [];
                   if (included.length === 0) return null;
@@ -485,30 +492,62 @@ export default function StepSummary() {
                       {/* Items */}
                       {isOpen && (
                         <div className="p-3 space-y-1.5">
-                          {included.map((item: any) => (
-                            <div
-                              key={item.id}
-                              className="flex items-start justify-between text-sm gap-2"
-                            >
-                              <div className="min-w-0">
-                                <span className="text-foreground font-medium truncate block">
-                                  {item.name}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  Qty: {item.quantity}
-                                  {item.qty_type !== "Fixed" &&
-                                    ` · ${calcCalculatedQty(item)} sq.ft`}
-                                  {" · "}₹{item.unit_price}/unit
+                          {included.map((item: any) => {
+                            // Calculate proper display values
+                            const isFixed = item.qty_type === "Fixed";
+                            const calculatedQty = calcCalculatedQty(item);
+                            const unitPrice = item.unit_price || 0;
+
+                            // Determine unit display
+                            let unitDisplay = isFixed ? "NOS" : "sq.ft";
+
+                            // For dimension-based items, show dimensions
+                            let dimensionsDisplay = "";
+                            if (!isFixed) {
+                              const h = item.height || 0;
+                              const w = item.width || 0;
+                              const d = item.depth || 0;
+                              const l = item.length || 0;
+                              const unit = item.measurement_unit || "inches";
+                              const unitLabel = unit === "feet" ? "ft" : "in";
+
+                              if (item.qty_type === "ByHW") {
+                                dimensionsDisplay = `${h}×${w} ${unitLabel}`;
+                              } else if (item.qty_type === "ByHWD") {
+                                dimensionsDisplay = `${h}×${w}×${d} ${unitLabel}`;
+                              } else if (item.qty_type === "ByHWL") {
+                                dimensionsDisplay = `${h}×${w}×${l} ${unitLabel}`;
+                              }
+                            }
+
+                            return (
+                              <div
+                                key={item.id}
+                                className="flex items-start justify-between text-sm gap-2"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-foreground font-medium truncate block">
+                                    {item.name}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-1">
+                                    <span>Qty: {item.quantity}</span>
+                                    {isFixed ? (
+                                      <span>· {unitDisplay}</span>
+                                    ) : (
+                                      <>
+                                        <span>· {dimensionsDisplay}</span>
+                                        <span>· {unitDisplay}: {calculatedQty.toFixed(2)}</span>
+                                      </>
+                                    )}
+                                    <span>· ₹{unitPrice}/unit</span>
+                                  </span>
+                                </div>
+                                <span className="text-foreground font-medium shrink-0">
+                                  ₹{Math.round(item.total_price || 0).toLocaleString()}
                                 </span>
                               </div>
-                              <span className="text-foreground font-medium shrink-0">
-                                ₹
-                                {Math.round(
-                                  item.total_price || 0,
-                                ).toLocaleString()}
-                              </span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -704,11 +743,11 @@ export default function StepSummary() {
                     ₹{Math.round(grandTotal).toLocaleString()}
                   </span>
                 </div>
-                {rooms && (
+                {roomsData && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Items:</span>
                     <span className="font-medium">
-                      {rooms.reduce(
+                      {roomsData.reduce(
                         (acc: number, room: any) =>
                           acc +
                           (room.items?.filter((i: any) => i.included).length ||

@@ -28,7 +28,7 @@ export default function Login() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(1); // 1: Company Code, 2: Login
+  const [step, setStep] = useState(1);
   const [companyCode, setCompanyCode] = useState("");
   const [companyValid, setCompanyValid] = useState(false);
   const [loginData, setLoginData] = useState({
@@ -39,19 +39,29 @@ export default function Login() {
   const [companyName, setCompanyName] = useState("");
   const [companyLogo, setCompanyLogo] = useState("");
   const [otpSentTo, setOtpSentTo] = useState("");
+  const [companyColors, setCompanyColors] = useState({
+    background_color: "#ee3c31",
+    text_color: "#ffffff",
+  });
 
   const API_URL =
     import.meta.env.VITE_API_URL ||
     "https://sunshineproduct.in/interior_designer/v1_api/";
+
+  // Get base path from environment
+  const BASE_PATH =
+    import.meta.env.VITE_BASE_PATH ||
+    "/interior_designer/build_v1/";
 
   // Check if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
     const user = localStorage.getItem("user_data");
     if (token && user) {
-      navigate("/");
+      // Use window.location for full page reload to ensure proper navigation
+      window.location.href = `${window.location.origin}${BASE_PATH}welcome`;
     }
-  }, [navigate]);
+  }, [BASE_PATH]);
 
   // Resend timer
   useEffect(() => {
@@ -60,6 +70,33 @@ export default function Login() {
       return () => clearTimeout(timer);
     }
   }, [resendTimer]);
+
+  // Update CSS variables when company colors change
+  useEffect(() => {
+    if (companyColors.background_color) {
+      document.documentElement.style.setProperty('--primary', companyColors.background_color);
+      document.documentElement.style.setProperty('--sidebar-bg', companyColors.background_color);
+      document.documentElement.style.setProperty('--sidebar-accent', companyColors.background_color);
+      document.documentElement.style.setProperty('--sidebar-hover', adjustColor(companyColors.background_color, -20));
+      document.documentElement.style.setProperty('--primary-glow', adjustColor(companyColors.background_color, 20));
+    }
+    if (companyColors.text_color) {
+      document.documentElement.style.setProperty('--sidebar-foreground', companyColors.text_color);
+    }
+  }, [companyColors]);
+
+  // Helper function to adjust color brightness
+  const adjustColor = (hex: string, percent: number): string => {
+    let r = parseInt(hex.slice(1, 3), 16);
+    let g = parseInt(hex.slice(3, 5), 16);
+    let b = parseInt(hex.slice(5, 7), 16);
+
+    r = Math.max(0, Math.min(255, r + percent * 2.55));
+    g = Math.max(0, Math.min(255, g + percent * 2.55));
+    b = Math.max(0, Math.min(255, b + percent * 2.55));
+
+    return `#${[r, g, b].map(c => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+  };
 
   // Verify Company Code
   const verifyCompanyCode = async (e: React.FormEvent) => {
@@ -81,13 +118,26 @@ export default function Login() {
       });
 
       if (response.data.status === "success") {
+        const company = response.data.company;
         setCompanyValid(true);
-        setCompanyName(response.data.company?.company_name || "");
-        setCompanyLogo(response.data.company?.logo || "");
+        setCompanyName(company?.company_name || "");
+        setCompanyLogo(company?.logo || "");
+        
+        const colors = {
+          background_color: company?.background_color || "#ee3c31",
+          text_color: company?.text_color || "#ffffff",
+        };
+        setCompanyColors(colors);
+        
+        localStorage.setItem("company_data", JSON.stringify({
+          ...company,
+          ...colors
+        }));
+        
         setStep(2);
         toast({
           title: "Company Verified",
-          description: `Welcome to ${response.data.company?.company_name || "Track Desk"}`,
+          description: `Welcome to ${company?.company_name || "Track Desk"}`,
         });
       } else {
         toast({
@@ -112,7 +162,8 @@ export default function Login() {
 
   // Password Login
   const handlePasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); // IMPORTANT: Prevent form submission reload
+    
     if (!loginData.login_code || !loginData.password) {
       toast({
         title: "Error",
@@ -132,14 +183,25 @@ export default function Login() {
       });
 
       if (response.data.status === "success") {
+        const userData = response.data.user;
+        const companyData = response.data.company;
+        
         localStorage.setItem("auth_token", response.data.token);
-        localStorage.setItem("user_data", JSON.stringify(response.data.user));
-        localStorage.setItem(
-          "company_data",
-          JSON.stringify(response.data.company)
-        );
+        localStorage.setItem("user_data", JSON.stringify({
+          ...userData,
+          access_pages: userData.access_pages || "",
+        }));
+        
+        const existingCompany = JSON.parse(localStorage.getItem("company_data") || "{}");
+        localStorage.setItem("company_data", JSON.stringify({
+          ...existingCompany,
+          ...companyData,
+        }));
+        
         toast({ title: "Welcome Back!", description: "Login successful" });
-        navigate("/");
+        
+        // Use window.location for full page reload with correct path
+        window.location.href = `${window.location.origin}${BASE_PATH}welcome`;
       } else {
         toast({
           title: "Error",
@@ -161,7 +223,7 @@ export default function Login() {
     }
   };
 
-  // Send OTP - User enters Login Code, OTP sent to registered email
+  // Send OTP
   const sendOtp = async () => {
     if (!loginData.login_code) {
       toast({
@@ -177,7 +239,7 @@ export default function Login() {
       const response = await axios.post(`${API_URL}login.php`, {
         type: 2,
         company_code: companyCode,
-        login_code: loginData.login_code, // Send login_code to find user
+        login_code: loginData.login_code,
       });
 
       if (response.data.status === "success") {
@@ -230,21 +292,32 @@ export default function Login() {
         type: 3,
         company_code: companyCode,
         otp: otp,
-        login_code: loginData.login_code, // Use login_code to find user
+        login_code: loginData.login_code,
       });
 
       if (response.data.status === "success") {
+        const userData = response.data.user;
+        const companyData = response.data.company;
+        
         localStorage.setItem("auth_token", response.data.token);
-        localStorage.setItem("user_data", JSON.stringify(response.data.user));
-        localStorage.setItem(
-          "company_data",
-          JSON.stringify(response.data.company)
-        );
+        localStorage.setItem("user_data", JSON.stringify({
+          ...userData,
+          access_pages: userData.access_pages || "",
+        }));
+        
+        const existingCompany = JSON.parse(localStorage.getItem("company_data") || "{}");
+        localStorage.setItem("company_data", JSON.stringify({
+          ...existingCompany,
+          ...companyData,
+        }));
+        
         toast({
           title: "Welcome Back!",
           description: "Login successful",
         });
-        navigate("/");
+        
+        // Use window.location for full page reload with correct path
+        window.location.href = `${window.location.origin}${BASE_PATH}welcome`;
       } else {
         toast({
           title: "Error",
@@ -270,18 +343,21 @@ export default function Login() {
   if (step === 1) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-4 relative overflow-hidden">
-        {/* Background Decorations */}
         <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)]" />
         <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-indigo-200/30 blur-3xl animate-pulse" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-purple-200/20 blur-3xl animate-pulse" />
 
         <Card className="w-full max-w-md p-8 rounded-3xl shadow-2xl border border-white/50 bg-white/95 backdrop-blur-sm relative animate-fade-in">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 flex items-center justify-center shadow-xl shadow-indigo-500/30 mb-4">
-              <span className="text-white font-display font-bold text-3xl">
-                TR
-              </span>
-            </div>
+            <img 
+              src="https://sunshineproduct.in/interior_designer/uploadfiles/company/trackdesk.png" 
+              alt="Track Desk" 
+              className="h-14 object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+            <br/>
             <h1 className="text-2xl font-display font-bold text-slate-900">
               Welcome to Track Desk
             </h1>
@@ -332,7 +408,6 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Footer */}
           <div className="mt-8 pt-6 border-t border-slate-100 text-center">
             <p className="text-xs text-slate-400">
               Powered by{" "}
@@ -352,9 +427,11 @@ export default function Login() {
   }
 
   // Login Screen
+  const primaryColor = companyColors.background_color || "#ee3c31";
+  const textColor = companyColors.text_color || "#ffffff";
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-4 relative overflow-hidden">
-      {/* Background Decorations */}
       <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)]" />
       <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-indigo-200/30 blur-3xl animate-pulse" />
       <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-purple-200/20 blur-3xl animate-pulse" />
@@ -363,7 +440,7 @@ export default function Login() {
         <div className="flex flex-col items-center mb-6">
           {companyLogo ? (
             <img
-              src={companyLogo}
+              src={`https://sunshineproduct.in/interior_designer/uploadfiles/company/${companyLogo}`}
               alt={companyName}
               className="w-20 h-20 rounded-2xl object-contain shadow-xl shadow-indigo-500/20 mb-4 bg-white p-2"
               onError={(e) => {
@@ -371,9 +448,14 @@ export default function Login() {
               }}
             />
           ) : (
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 flex items-center justify-center shadow-xl shadow-indigo-500/30 mb-4">
+            <div 
+              className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-500/30 mb-4"
+              style={{ 
+                background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})` 
+              }}
+            >
               <span className="text-white font-display font-bold text-3xl">
-                {companyName.charAt(0) || "TR"}
+                {companyName ? companyName.charAt(0).toUpperCase() : "TR"}
               </span>
             </div>
           )}
@@ -417,7 +499,6 @@ export default function Login() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Password Tab */}
           <TabsContent value="password" className="space-y-4">
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
@@ -474,7 +555,11 @@ export default function Login() {
 
               <Button
                 type="submit"
-                className="w-full h-12 rounded-xl text-base font-semibold gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
+                className="w-full h-12 rounded-xl text-base font-semibold gap-2 shadow-lg hover:shadow-xl transition-all text-white"
+                style={{ 
+                  background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
+                  boxShadow: `0 8px 24px -6px ${primaryColor}40`
+                }}
                 disabled={loading}
               >
                 {loading ? (
@@ -492,10 +577,8 @@ export default function Login() {
             </form>
           </TabsContent>
 
-          {/* OTP Tab - User enters Login Code, OTP sent to Email */}
           <TabsContent value="otp" className="space-y-4">
             <div className="space-y-4">
-              {/* Info message */}
               <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
                 <div className="flex items-start gap-2">
                   <MailCheck className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
@@ -530,7 +613,11 @@ export default function Login() {
               {!otpSent ? (
                 <Button
                   onClick={sendOtp}
-                  className="w-full h-12 rounded-xl text-base font-semibold gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
+                  className="w-full h-12 rounded-xl text-base font-semibold gap-2 shadow-lg hover:shadow-xl transition-all text-white"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
+                    boxShadow: `0 8px 24px -6px ${primaryColor}40`
+                  }}
                   disabled={loading || !loginData.login_code}
                 >
                   {loading ? (
@@ -547,7 +634,6 @@ export default function Login() {
                 </Button>
               ) : (
                 <>
-                  {/* OTP Sent Message */}
                   <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
                     <div className="flex items-start gap-3">
                       <CheckCircle2 className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
@@ -593,7 +679,11 @@ export default function Login() {
 
                   <Button
                     onClick={verifyOtp}
-                    className="w-full h-12 rounded-xl text-base font-semibold gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all"
+                    className="w-full h-12 rounded-xl text-base font-semibold gap-2 shadow-lg hover:shadow-xl transition-all text-white"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
+                      boxShadow: `0 8px 24px -6px ${primaryColor}40`
+                    }}
                     disabled={loading || !otp || otp.length < 4}
                   >
                     {loading ? (
@@ -644,7 +734,6 @@ export default function Login() {
           </TabsContent>
         </Tabs>
 
-        {/* Footer */}
         <div className="mt-6 pt-6 border-t border-slate-100 text-center">
           <p className="text-xs text-slate-400">
             Powered by{" "}

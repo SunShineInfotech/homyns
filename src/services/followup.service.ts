@@ -19,6 +19,13 @@ export interface Followup {
   lead_phone?: string;
 }
 
+export interface FollowupFilters {
+  employee_id?: string;
+  start_date?: string;
+  end_date?: string;
+  lead_id?: string;
+}
+
 export class FollowupService extends BaseService {
   constructor() {
     super('followup.php');
@@ -27,7 +34,12 @@ export class FollowupService extends BaseService {
   /**
    * Get all followups for a company
    */
-  async getFollowups(companyId: string, type: 'all' | 'my_today' = 'all', empId?: string): Promise<ApiResponse<Followup[]>> {
+  async getFollowups(
+    companyId: string, 
+    type: 'all' | 'my' | 'my_today' = 'all', 
+    empId?: string,
+    filters?: FollowupFilters
+  ): Promise<ApiResponse<Followup[]>> {
     try {
       const payload: any = {
         type: 3,
@@ -36,6 +48,12 @@ export class FollowupService extends BaseService {
       };
       if (empId) {
         payload.emp_id = empId;
+      }
+      if (filters) {
+        if (filters.employee_id) payload.filter_employee_id = filters.employee_id;
+        if (filters.start_date) payload.start_date = filters.start_date;
+        if (filters.end_date) payload.end_date = filters.end_date;
+        if (filters.lead_id) payload.filter_lead_id = filters.lead_id;
       }
       const response = await this.post<ApiResponse<Followup[]>>(payload);
       
@@ -63,6 +81,11 @@ export class FollowupService extends BaseService {
         type: 4,
         lead_id: leadId
       });
+      
+      if (response.status === 'success' && !response.data) {
+        response.data = [];
+      }
+      
       return response;
     } catch (error: any) {
       console.error('Get lead followups error:', error);
@@ -129,6 +152,26 @@ export class FollowupService extends BaseService {
       return {
         status: 'error',
         message: error.response?.data?.message || 'Failed to delete followup'
+      };
+    }
+  }
+
+  /**
+   * Transfer followups to another employee
+   */
+  async transferFollowups(followupIds: string[], targetEmployeeId: string): Promise<ApiResponse> {
+    try {
+      const response = await this.post<ApiResponse>({
+        type: 6,
+        followup_ids: followupIds,
+        target_employee_id: targetEmployeeId
+      });
+      return response;
+    } catch (error: any) {
+      console.error('Transfer followups error:', error);
+      return {
+        status: 'error',
+        message: error.response?.data?.message || 'Failed to transfer followups'
       };
     }
   }

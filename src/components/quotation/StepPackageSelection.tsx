@@ -52,11 +52,11 @@ export function StepPackageSelection({
       <div className="text-center mb-8">
         <h2 className="text-2xl font-display font-semibold text-foreground mb-2">Select Package</h2>
         <p className="text-muted-foreground">Choose a package that best suits your client's needs</p>
-        {onSkip && (
+        {/* {onSkip && (
           <Button variant="ghost" size="sm" onClick={onSkip} className="mt-2 gap-1">
             <SkipForward className="w-3 h-3" /> Skip this step
           </Button>
-        )}
+        )} */}
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -78,12 +78,12 @@ export function StepPackageSelection({
               </div>
               <h3 className="text-xl font-display font-semibold text-foreground mb-2">{pkg.package_name}</h3>
               {pkg.details && <p className="text-sm text-muted-foreground mb-4 min-h-[40px]">{pkg.details}</p>}
-              <div className="mb-5">
+              {/* <div className="mb-5">
                 <span className="text-sm text-muted-foreground">Completion</span>
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl font-semibold text-foreground">{pkg.completion_days || 0} days</span>
                 </div>
-              </div>
+              </div> */}
               <ul className="space-y-2.5">
                 {pkg.rooms && (
                   <li className="flex items-center gap-2 text-sm">

@@ -10,6 +10,7 @@ import { leadService, Lead } from "@/services/lead.service";
 import { followupService, Followup } from "@/services/followup.service";
 import {
   ArrowLeft,
+  Plus, // ADD THIS
   Loader2,
   User,
   Phone,

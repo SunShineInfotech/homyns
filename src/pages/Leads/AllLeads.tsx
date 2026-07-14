@@ -30,7 +30,8 @@ import {
   MapPin,
   X,
   Eye,
-  Filter,
+  UserCheck,
+  Building2,
 } from "lucide-react";
 
 export default function AllLeads() {
@@ -40,8 +41,11 @@ export default function AllLeads() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
+  const [convertConfirm, setConvertConfirm] = useState(false);
+  const [convertTarget, setConvertTarget] = useState<Lead | null>(null);
 
   const getCompanyId = (): string => {
     try {
@@ -57,16 +61,22 @@ export default function AllLeads() {
       const companyId = getCompanyId();
       if (!companyId) {
         toast({ title: "Error", description: "Company not found", variant: "destructive" });
+        setLeads([]);
         return;
       }
       const res = await leadService.getLeads(companyId, 'all');
-      if (res.status === "success" && res.data) {
+      console.log('AllLeads fetchLeads response:', res);
+      
+      if (res.status === "success" && Array.isArray(res.data)) {
         setLeads(res.data);
       } else {
-        toast({ title: "Error", description: res.message || "Failed to fetch leads", variant: "destructive" });
         setLeads([]);
+        if (res.message) {
+          toast({ title: "Error", description: res.message, variant: "destructive" });
+        }
       }
     } catch (e: any) {
+      console.error('AllLeads fetchLeads error:', e);
       toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
       setLeads([]);
     } finally {
@@ -86,11 +96,32 @@ export default function AllLeads() {
         (l) =>
           l.lead_name?.toLowerCase().includes(q) ||
           l.phone1?.includes(q) ||
-          l.email?.toLowerCase().includes(q)
+          l.email?.toLowerCase().includes(q) ||
+          l.project_name?.toLowerCase().includes(q)
       );
     }
     setFiltered(list);
   }, [leads, search]);
+
+  const handleConvertToClient = async () => {
+    if (!convertTarget?.lead_id) return;
+    setConverting(true);
+    try {
+      const res = await leadService.convertToClient(convertTarget.lead_id);
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Lead converted to client successfully" });
+        setConvertConfirm(false);
+        setConvertTarget(null);
+        await fetchLeads();
+      } else {
+        toast({ title: "Error", description: res.message || "Failed to convert", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+    } finally {
+      setConverting(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget?.lead_id) return;
@@ -129,7 +160,7 @@ export default function AllLeads() {
 
   if (loading) {
     return (
-      <MainLayout title="All Leads" subtitle="View all leads">
+      <MainLayout title="All Leads" subtitle="Manage all leads">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -146,7 +177,7 @@ export default function AllLeads() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search leads by name, phone, email..."
+              placeholder="Search leads by name, phone, email, project..."
               className="pl-9 h-10 rounded-xl"
             />
             {search && (
@@ -180,64 +211,172 @@ export default function AllLeads() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((lead) => (
-              <Card key={lead.lead_id} className="p-5 rounded-2xl hover:shadow-elevated transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground truncate">{lead.lead_name}</h3>
-                    {lead.phone1 && (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block rounded-2xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground w-12">#</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Lead Name</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Phone</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Project</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Assigned To</th>
+                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {filtered.map((lead, idx) => (
+                    <tr key={lead.lead_id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 text-muted-foreground">{idx + 1}</td>
+                      <td className="px-4 py-3 font-medium">{lead.lead_name}</td>
+                      <td className="px-4 py-3">{lead.phone1}</td>
+                      <td className="px-4 py-3">{lead.project_name || "—"}</td>
+                      <td className="px-4 py-3">
+                        <Badge className={getStatusColor(lead.status_name || lead.status)}>
+                          {lead.status_name || lead.status || "New"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">{lead.assigned_emp_name || "—"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1">
+                          {lead.converted_client_id ? (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 text-xs whitespace-nowrap">
+                              <UserCheck className="h-3 w-3 mr-1" /> Converted
+                            </Badge>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                              onClick={() => {
+                                setConvertTarget(lead);
+                                setConvertConfirm(true);
+                              }}
+                              title="Convert to Client"
+                            >
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary" 
+                            onClick={() => navigate(`/lead/view/${lead.lead_id}`)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" 
+                            onClick={() => navigate(`/lead/form/${lead.lead_id}`)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost" 
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => { setDeleteTarget(lead); setDeleteConfirm(true); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {filtered.map((lead) => (
+                <Card key={lead.lead_id} className="p-4 rounded-2xl">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground truncate">{lead.lead_name}</p>
                       <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Phone className="h-3 w-3" /> {lead.phone1}
                       </p>
-                    )}
-                    {lead.email && (
-                      <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
-                        <Mail className="h-3 w-3 shrink-0" /> {lead.email}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-1 shrink-0 ml-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => navigate(`/lead/view/${lead.lead_id}`)}>
-                      <Eye className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" onClick={() => navigate(`/lead/form/${lead.lead_id}`)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => { setDeleteTarget(lead); setDeleteConfirm(true); }}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {lead.source_name && (
-                    <Badge variant="secondary" className="rounded-md text-xs px-2 py-0.5">{lead.source_name}</Badge>
-                  )}
-                  {lead.status && (
-                    <Badge className={`rounded-md text-xs px-2 py-0.5 ${getStatusColor(lead.status_name || lead.status)}`}>
-                      {lead.status_name || lead.status}
+                      {lead.email && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
+                          <Mail className="h-3 w-3 shrink-0" /> {lead.email}
+                        </p>
+                      )}
+                      {lead.project_name && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Building2 className="h-3 w-3" /> {lead.project_name}
+                        </p>
+                      )}
+                    </div>
+                    <Badge className={getStatusColor(lead.status_name || lead.status)}>
+                      {lead.status_name || lead.status || "New"}
                     </Badge>
-                  )}
-                </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {lead.source_name && (
+                      <Badge variant="secondary" className="rounded-md text-xs px-2 py-0.5">{lead.source_name}</Badge>
+                    )}
+                    {lead.project_type_name && (
+                      <Badge variant="outline" className="rounded-md text-xs px-2 py-0.5">{lead.project_type_name}</Badge>
+                    )}
+                  </div>
 
-                {lead.address && (
-                  <p className="text-xs text-muted-foreground flex items-start gap-1 mt-3">
-                    <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
-                    <span className="truncate">{lead.address}</span>
-                  </p>
-                )}
-
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-                  <span>{lead.assigned_emp_name || "Unassigned"}</span>
-                  <span>{lead.c_date ? new Date(lead.c_date).toLocaleDateString() : ""}</span>
-                </div>
-              </Card>
-            ))}
-          </div>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                    <span className="text-xs text-muted-foreground">{lead.assigned_emp_name || "Unassigned"}</span>
+                    <div className="flex gap-1">
+                      {!lead.converted_client_id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50"
+                          onClick={() => {
+                            setConvertTarget(lead);
+                            setConvertConfirm(true);
+                          }}
+                          title="Convert to Client"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary" 
+                        onClick={() => navigate(`/lead/view/${lead.lead_id}`)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" 
+                        onClick={() => navigate(`/lead/form/${lead.lead_id}`)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => { setDeleteTarget(lead); setDeleteConfirm(true); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirm} onOpenChange={(o) => { if (!o && !deleting) { setDeleteConfirm(false); setDeleteTarget(null); } }}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
@@ -250,6 +389,28 @@ export default function AllLeads() {
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {deleting ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting...</> : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Convert to Client Confirmation Dialog */}
+      <AlertDialog open={convertConfirm} onOpenChange={(o) => { if (!o && !converting) { setConvertConfirm(false); setConvertTarget(null); } }}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Convert to Client</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to convert <strong className="text-foreground">{convertTarget?.lead_name}</strong> to a client?
+              <br />
+              <span className="text-sm text-muted-foreground mt-2 block">
+                This will create a client record and link it to this lead. The lead will be marked as converted.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={converting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConvertToClient} disabled={converting} className="bg-emerald-600 text-white hover:bg-emerald-700">
+              {converting ? <><Loader2 className="h-4 w-4 animate-spin" /> Converting...</> : "Yes, Convert to Client"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

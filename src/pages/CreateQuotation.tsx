@@ -157,8 +157,8 @@ export default function CreateQuotation() {
                       currentStep === step.id
                         ? "bg-primary text-primary-foreground shadow-lg scale-110"
                         : currentStep > step.id
-                        ? "bg-success text-success-foreground"
-                        : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                          ? "bg-success text-success-foreground"
+                          : "bg-secondary text-muted-foreground hover:bg-secondary/80"
                     )}
                   >
                     {currentStep > step.id ? (
@@ -173,8 +173,8 @@ export default function CreateQuotation() {
                       currentStep === step.id
                         ? "text-primary"
                         : currentStep > step.id
-                        ? "text-success"
-                        : "text-muted-foreground"
+                          ? "text-success"
+                          : "text-muted-foreground"
                     )}
                   >
                     {step.name}
@@ -214,31 +214,29 @@ export default function CreateQuotation() {
               <ChevronLeft className="w-4 h-4" />
               Previous
             </Button>
-
-            {currentStep < 6 ? (
-              <Button
-                onClick={handleNext}
-                className="gap-2"
-              >
+            {currentStep < 4 ? (
+              <Button onClick={handleNext} className="gap-2">
                 Next Step
                 <ChevronRight className="w-4 h-4" />
               </Button>
-            ) : (
+            ) : currentStep === 5 ? (
               <div className="flex gap-3">
                 <Button variant="outline" className="gap-2">
                   <Download className="w-4 h-4" />
                   Download PDF
                 </Button>
+
                 <Button variant="outline" className="gap-2">
                   <Mail className="w-4 h-4" />
                   Email
                 </Button>
+
                 <Button className="gap-2 bg-success hover:bg-success/90">
                   <MessageCircle className="w-4 h-4" />
                   WhatsApp
                 </Button>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>

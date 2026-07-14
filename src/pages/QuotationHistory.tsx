@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type SortKey =
+  | "quotation_id"
   | "quotation_number"
   | "client_name"
   | "final_amount"
@@ -81,8 +82,8 @@ export default function QuotationHistory() {
   const [customerId, setCustomerId] = useState("");
   const [search, setSearch] = useState("");
 
-  // Sort
-  const [sortKey, setSortKey] = useState<SortKey>("c_date");
+  // Sort - Default: sort by quotation_id DESC (newest first)
+  const [sortKey, setSortKey] = useState<SortKey>("quotation_id");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Delete
@@ -159,6 +160,7 @@ export default function QuotationHistory() {
     console.log("Filtering quotations:", quotations.length);
     let list = [...quotations];
 
+    // Apply search filter
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -169,6 +171,7 @@ export default function QuotationHistory() {
       );
     }
 
+    // Apply date filters
     if (start) {
       list = list.filter(
         (item) => item.c_date && item.c_date.slice(0, 10) >= start,
@@ -179,22 +182,31 @@ export default function QuotationHistory() {
         (item) => item.c_date && item.c_date.slice(0, 10) <= end,
       );
     }
+
+    // Apply customer filter
     if (customerId) {
       list = list.filter((item) => item.client_id === customerId);
     }
 
+    // Apply sorting
     list.sort((a, b) => {
-      let va = "";
-      let vb = "";
-      if (sortKey === "quotation_number") {
+      let va: any = "";
+      let vb: any = "";
+      
+      if (sortKey === "quotation_id") {
+        va = Number(a.quotation_id) || 0;
+        vb = Number(b.quotation_id) || 0;
+        return sortDir === "asc" ? va - vb : vb - va;
+      } else if (sortKey === "quotation_number") {
         va = (a.quotation_number || "").toLowerCase();
         vb = (b.quotation_number || "").toLowerCase();
       } else if (sortKey === "client_name") {
         va = (a.client_name || "").toLowerCase();
         vb = (b.client_name || "").toLowerCase();
       } else if (sortKey === "final_amount") {
-        va = String(a.final_amount || 0);
-        vb = String(b.final_amount || 0);
+        va = Number(a.final_amount || 0);
+        vb = Number(b.final_amount || 0);
+        return sortDir === "asc" ? va - vb : vb - va;
       } else if (sortKey === "status") {
         va = (a.status || "").toLowerCase();
         vb = (b.status || "").toLowerCase();
@@ -202,6 +214,7 @@ export default function QuotationHistory() {
         va = a.c_date || "";
         vb = b.c_date || "";
       }
+      
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
@@ -383,6 +396,14 @@ export default function QuotationHistory() {
               <tr>
                 <th
                   className="px-4 py-3 text-left font-medium text-muted-foreground cursor-pointer select-none"
+                  onClick={() => toggleSort("quotation_id")}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Id <SortIcon col="quotation_id" />
+                  </span>
+                </th>
+                <th
+                  className="px-4 py-3 text-left font-medium text-muted-foreground cursor-pointer select-none"
                   onClick={() => toggleSort("quotation_number")}
                 >
                   <span className="flex items-center gap-1.5">
@@ -436,6 +457,9 @@ export default function QuotationHistory() {
                     key={item.quotation_id}
                     className="hover:bg-muted/30 transition-colors"
                   >
+                    <td className="px-4 py-3 font-mono font-medium">
+                      #{item.quotation_id}
+                    </td>
                     <td className="px-4 py-3 font-mono font-medium">
                       {item.quotation_number}
                     </td>
@@ -492,7 +516,7 @@ export default function QuotationHistory() {
               ) : (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-12 text-center text-muted-foreground"
                   >
                     No quotations found
@@ -515,6 +539,9 @@ export default function QuotationHistory() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-mono font-semibold text-foreground">
+                        #{item.quotation_id}
+                      </p>
+                      <p className="font-mono text-sm text-muted-foreground">
                         {item.quotation_number}
                       </p>
                       <Badge

@@ -231,14 +231,14 @@ export default function Packages() {
                       </span>
                     </th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Details</th>
-                    <th
+                    {/* <th
                       className="px-4 py-3 text-center font-medium text-muted-foreground cursor-pointer select-none"
                       onClick={() => toggleSort("completion_days")}
                     >
                       <span className="flex items-center justify-center gap-1.5">
                         Days <SortIcon col="completion_days" />
                       </span>
-                    </th>
+                    </th> */}
                     <th className="px-4 py-3 text-center font-medium text-muted-foreground">Rooms</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Created By</th>
                     <th
@@ -260,11 +260,11 @@ export default function Packages() {
                       <td className="px-4 py-3 text-muted-foreground truncate max-w-xs">
                         {p.details || "—"}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      {/* <td className="px-4 py-3 text-center">
                         <Badge variant="outline" className="rounded-md font-mono">
                           {p.completion_days || 0}
                         </Badge>
-                      </td>
+                      </td> */}
                       <td className="px-4 py-3 text-center">
                         <Badge variant="secondary" className="rounded-md">
                           {getRoomCount(p.rooms || '')}

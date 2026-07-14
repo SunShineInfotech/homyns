@@ -1,3 +1,4 @@
+// src/pages/Dashboard.tsx
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -7,10 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  FileText, FileEdit, Clock, CheckCircle2, XCircle, TrendingUp,
+  FileText, Clock, CheckCircle2, TrendingUp,
   ArrowRight, Plus, Calendar, Users, PhoneCall, PieChart as PieChartIcon,
-  Loader2, MessageSquare, User, Phone, BarChart3, Activity,
-  Target, Zap, Star, TrendingDown, DollarSign,
+  Loader2, User, Phone, Star, TrendingDown,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -42,19 +42,6 @@ const STATUS_COLORS: Record<string, string> = {
   'Work Completed': '#10b981',
   'Closed': '#6b7280',
   'Rejected': '#ef4444',
-};
-
-const LEAD_STATUS_COLORS: Record<string, string> = {
-  'New': '#3b82f6',
-  'Contacted': '#f59e0b',
-  'Qualified': '#8b5cf6',
-  'Proposal Sent': '#ec4899',
-  'Negotiation': '#f97316',
-  'Won': '#22c55e',
-  'Lost': '#ef4444',
-  'Follow-up': '#06b6d4',
-  'Not Interested': '#6b7280',
-  'Junk': '#d1d5db',
 };
 
 export default function Dashboard() {
@@ -136,7 +123,7 @@ export default function Dashboard() {
         if (followupsRes.status === "success" && followupsRes.data) {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          
+
           const todayList = followupsRes.data.filter((f: any) => {
             if (!f.next_followup_date) return false;
             const nextDate = new Date(f.next_followup_date);
@@ -189,13 +176,20 @@ export default function Dashboard() {
     return counts;
   }, [filteredQuotations]);
 
-  // Lead Status Counts with breakdown
+  // Lead Status Counts with dynamic colors from database
   const leadStatusCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, { count: number; bgColor: string; fontColor: string }> = {};
     filteredLeads.forEach((l) => {
       const statusId = l.status || '';
-      const statusName = leadStatuses.find(s => s.status_id === statusId)?.status_name || statusId || 'Unknown';
-      counts[statusName] = (counts[statusName] || 0) + 1;
+      const status = leadStatuses.find(s => s.status_id === statusId);
+      const statusName = status?.status_name || statusId || 'Unknown';
+      const bgColor = status?.background_color || '#6b7280';
+      const fontColor = status?.font_color || '#ffffff';
+
+      if (!counts[statusName]) {
+        counts[statusName] = { count: 0, bgColor, fontColor };
+      }
+      counts[statusName].count += 1;
     });
     return counts;
   }, [filteredLeads, leadStatuses]);
@@ -267,43 +261,43 @@ export default function Dashboard() {
     return STATUS_COLORS[status] || '#6b7280';
   };
 
-  const getLeadStatusColor = (status: string) => {
-    return LEAD_STATUS_COLORS[status] || '#6b7280';
-  };
-
   // KPIs with status breakdown
   const kpis = [
-    { 
-      label: "Total Quotations", 
-      value: totalQuotations, 
-      icon: FileText, 
+    {
+      label: "Total Quotations",
+      value: totalQuotations,
+      icon: FileText,
       color: "primary",
       breakdown: quotationStatusItems,
-      breakdownLabel: "Status"
+      breakdownLabel: "Status",
+      isQuotation: true
     },
-    { 
-      label: "Total Leads", 
-      value: totalLeads, 
-      icon: Users, 
+    {
+      label: "Total Leads",
+      value: totalLeads,
+      icon: Users,
       color: "primary",
       breakdown: leadStatusItems,
-      breakdownLabel: "Status"
+      breakdownLabel: "Status",
+      isQuotation: false
     },
-    { 
-      label: "Total Clients", 
-      value: totalClients, 
-      icon: User, 
+    {
+      label: "Total Clients",
+      value: totalClients,
+      icon: User,
       color: "success",
       breakdown: [],
-      breakdownLabel: ""
+      breakdownLabel: "",
+      isQuotation: false
     },
-    { 
-      label: "Lead Sources", 
-      value: totalSources, 
-      icon: PieChartIcon, 
+    {
+      label: "Lead Sources",
+      value: totalSources,
+      icon: PieChartIcon,
       color: "warning",
       breakdown: Object.entries(leadSourceCounts).sort(([, a], [, b]) => b - a),
-      breakdownLabel: "Source"
+      breakdownLabel: "Source",
+      isQuotation: false
     },
   ];
 
@@ -317,7 +311,14 @@ export default function Dashboard() {
 
   // Prepare chart data
   const quotationPieData = Object.entries(quotationStatusCounts).map(([name, value]) => ({ name, value }));
-  const leadStatusPieData = Object.entries(leadStatusCounts).map(([name, value]) => ({ name, value }));
+  
+  // Lead status pie data with colors from database
+  const leadStatusPieData = Object.entries(leadStatusCounts).map(([name, data]) => ({ 
+    name, 
+    value: data.count,
+    color: data.bgColor
+  }));
+  
   const leadSourcePieData = Object.entries(leadSourceCounts).map(([name, value]) => ({ name, value }));
 
   // Sort lead source data for bar chart
@@ -327,10 +328,6 @@ export default function Dashboard() {
   const recentLeads = [...filteredLeads]
     .sort((a, b) => (b.c_date || '').localeCompare(a.c_date || ''))
     .slice(0, 5);
-
-  const formatCurrency = (amount: number) => {
-    return `₹${Math.round(amount || 0).toLocaleString()}`;
-  };
 
   const getSourceStatusColor = (name: string) => {
     if (name === bestSource.name) return 'text-success border-success bg-success/10';
@@ -351,20 +348,36 @@ export default function Dashboard() {
   return (
     <MainLayout title="Dashboard" subtitle="Overview of your business">
       <div className="space-y-6 animate-fade-in pb-20">
-        {/* Hero CTA */}
-        <Card className="border-0 p-5 md:p-7 shadow-elevated overflow-hidden relative bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground rounded-2xl">
-          <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute -left-10 -bottom-10 w-32 h-32 rounded-full bg-white/5 blur-xl" />
-          <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl md:text-2xl font-display font-semibold mb-1">Create New Quotation</h2>
-              <p className="text-primary-foreground/85 text-sm md:text-base">Start crafting a professional quotation in minutes</p>
+        {/* Hero CTAs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="border-0 p-5 md:p-7 shadow-elevated overflow-hidden relative bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground rounded-2xl">
+            <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute -left-10 -bottom-10 w-32 h-32 rounded-full bg-white/5 blur-xl" />
+            <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl md:text-2xl font-display font-semibold mb-1">How To Use</h2>
+                <p className="text-primary-foreground/85 text-sm md:text-base">Learn how to create, customize, and share professional quotations in just a few simple steps.</p>
+              </div>
+              <Button onClick={() => navigate("/how-to-use")} size="lg" className="bg-white text-primary hover:bg-white/90 rounded-xl gap-2 shadow-lg shrink-0">
+                <Plus className="w-5 h-5" /> View Guide
+              </Button>
             </div>
-            <Button onClick={() => navigate("/create-quotation/client")} size="lg" className="bg-white text-primary hover:bg-white/90 rounded-xl gap-2 shadow-lg">
-              <Plus className="w-5 h-5" /> New Quotation
-            </Button>
-          </div>
-        </Card>
+          </Card>
+
+          <Card className="border-0 p-5 md:p-7 shadow-elevated overflow-hidden relative bg-gradient-to-r from-blue-600 via-blue-500 to-blue-400 text-white rounded-2xl">
+            <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute -left-10 -bottom-10 w-32 h-32 rounded-full bg-white/5 blur-xl" />
+            <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl md:text-2xl font-display font-semibold mb-1">Create New Quotation</h2>
+                <p className="text-white/85 text-sm md:text-base">Start crafting a professional quotation in minutes</p>
+              </div>
+              <Button onClick={() => navigate("/create-quotation/client")} size="lg" className="bg-white text-blue-600 hover:bg-white/90 rounded-xl gap-2 shadow-lg shrink-0">
+                <Plus className="w-5 h-5" /> New Quotation
+              </Button>
+            </div>
+          </Card>
+        </div>
 
         {/* Date Filter */}
         <Card className="p-4 md:p-5 rounded-2xl border-border">
@@ -398,28 +411,31 @@ export default function Dashboard() {
                 <span className="text-2xl font-display font-bold text-foreground">{k.value}</span>
               </div>
               <p className="text-sm font-medium text-muted-foreground">{k.label}</p>
-              
+
               {/* Status Breakdown */}
               {k.breakdown && k.breakdown.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border space-y-1.5">
-                  {k.breakdown.slice(0, 5).map(([name, count]) => (
-                    <div key={name} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span 
-                          className="w-2.5 h-2.5 rounded-full shrink-0" 
-                          style={{ 
-                            backgroundColor: k.label === "Total Quotations" 
-                              ? getQuotationStatusColor(name) 
-                              : k.label === "Total Leads" 
-                                ? getLeadStatusColor(name) 
-                                : COLORS[Math.floor(Math.random() * COLORS.length)]
-                          }} 
-                        />
-                        <span className="text-muted-foreground truncate max-w-[100px]">{name}</span>
+                  {k.breakdown.slice(0, 5).map(([name, data]) => {
+                    const color = k.isQuotation 
+                      ? getQuotationStatusColor(name)
+                      : (typeof data === 'object' && data.bgColor) || COLORS[Math.floor(Math.random() * COLORS.length)];
+                    const count = typeof data === 'object' ? data.count : data;
+                    
+                    return (
+                      <div key={name} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="text-muted-foreground truncate max-w-[100px]">
+                            {name}
+                          </span>
+                        </div>
+                        <span className="font-medium text-foreground">{count}</span>
                       </div>
-                      <span className="font-medium text-foreground">{count}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {k.breakdown.length > 5 && (
                     <div className="text-[10px] text-muted-foreground text-center pt-1">
                       +{k.breakdown.length - 5} more
@@ -482,7 +498,7 @@ export default function Dashboard() {
                 <PieChart>
                   <Pie data={leadStatusPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2}>
                     {leadStatusPieData.map((entry, i) => (
-                      <Cell key={i} fill={LEAD_STATUS_COLORS[entry.name] || COLORS[i % COLORS.length]} />
+                      <Cell key={i} fill={entry.color || COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }} />
@@ -682,14 +698,23 @@ export default function Dashboard() {
                 )}
                 {recentLeads.map((lead) => {
                   const sourceName = leadSources.find(s => s.source_id === lead.source_id)?.source_name || lead.source_id || '—';
-                  const statusName = leadStatuses.find(s => s.status_id === lead.status)?.status_name || lead.status || '—';
+                  const status = leadStatuses.find(s => s.status_id === lead.status);
+                  const statusName = status?.status_name || lead.status || '—';
+                  const statusStyle = {
+                    backgroundColor: status?.background_color || '#6b7280',
+                    color: status?.font_color || '#ffffff',
+                  };
+                  
                   return (
                     <tr key={lead.lead_id} className="hover:bg-secondary/40 cursor-pointer" onClick={() => navigate(`/lead/view/${lead.lead_id}`)}>
                       <td className="px-5 py-3.5 font-medium">{lead.lead_name}</td>
                       <td className="px-5 py-3.5 text-muted-foreground">{lead.phone1 || '—'}</td>
                       <td className="px-5 py-3.5 text-muted-foreground hidden md:table-cell">{sourceName}</td>
                       <td className="px-5 py-3.5">
-                        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                        <span 
+                          className="inline-block px-2.5 py-1 rounded-full text-xs font-medium border-0"
+                          style={statusStyle}
+                        >
                           {statusName}
                         </span>
                       </td>

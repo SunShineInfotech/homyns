@@ -10,12 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "@/hooks/use-toast";
 import { employeeService, Employee } from "@/services/employee.service";
-import { 
-  ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon, 
+import {
+  ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon,
   Users, Lock, Calendar, Phone, Mail, User, MapPin, CreditCard,
   LayoutDashboard, FilePlus, FileText, UserPlus, Package, Layers,
   DoorOpen, Ruler, Tag, FolderTree, Map, Building2, MapPin as MapPinIcon,
-  Settings, UserCircle, Grid, ClipboardList, BarChart3, PhoneCall,AlertCircle  
+  Settings, UserCircle, Grid, ClipboardList, BarChart3, PhoneCall, AlertCircle,
+  Calendar as CalendarIcon, ArrowRightLeft
 } from "lucide-react";
 
 const GENDER_OPTIONS = [
@@ -29,7 +30,7 @@ const STATUS_OPTIONS = [
   { value: "Inactive", label: "Inactive" },
 ];
 
-// Grouped pages for access_pages
+// Grouped pages for access_pages - Updated with new Lead & Followup pages
 const PAGE_GROUPS = [
   {
     name: "Dashboard",
@@ -47,14 +48,22 @@ const PAGE_GROUPS = [
     ]
   },
   {
-    name: "Clients & Leads",
+    name: "Clients",
     icon: Users,
     pages: [
       { value: "clients", label: "Clients" },
+    ]
+  },
+  {
+    name: "Leads & Followups",
+    icon: UserPlus,
+    pages: [
       { value: "my-leads", label: "My Leads" },
       { value: "all-leads", label: "All Leads" },
-      { value: "my-today-followup", label: "My Today Followup" },
+      { value: "my-followups", label: "My Followups" },
       { value: "all-followups", label: "All Followups" },
+      { value: "today-followups", label: "Today Followups" },
+      { value: "transfer", label: "Transfer" },
     ]
   },
   {
@@ -298,7 +307,7 @@ export default function EmployeeForm() {
   const toggleAllPagesInGroup = (groupPages: { value: string; label: string }[]) => {
     const groupValues = groupPages.map(p => p.value);
     const allSelected = groupValues.every(v => selectedPages.includes(v));
-    
+
     if (allSelected) {
       setSelectedPages(prev => prev.filter(p => !groupValues.includes(p)));
     } else {
@@ -318,6 +327,7 @@ export default function EmployeeForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validation
     if (!formData.name?.trim()) {
       setFormError("Employee name is required.");
       nameInputRef.current?.focus();
@@ -345,22 +355,28 @@ export default function EmployeeForm() {
 
     try {
       const formDataToSend = new FormData();
+
+      // Add required fields
       formDataToSend.append('type', isEditMode ? '2' : '1');
       formDataToSend.append('company_id', getCompanyId());
       formDataToSend.append('login_code', formData.login_code!.trim());
       formDataToSend.append('name', formData.name!.trim());
-      formDataToSend.append('phone1', formData.phone1?.trim() || '');
-      formDataToSend.append('phone2', formData.phone2?.trim() || '');
-      formDataToSend.append('email', formData.email?.trim() || '');
-      formDataToSend.append('gender', formData.gender || '');
-      formDataToSend.append('aadhar_card', formData.aadhar_card?.trim() || '');
-      formDataToSend.append('pan_card', formData.pan_card?.trim() || '');
-      formDataToSend.append('address', formData.address?.trim() || '');
-      formDataToSend.append('joining_date', formData.joining_date || '');
-      formDataToSend.append('birth_date', formData.birth_date || '');
-      formDataToSend.append('access_pages', selectedPages.join(','));
-      formDataToSend.append('status', formData.status || 'Active');
-      
+
+      // Add optional fields (only if they have values)
+      if (formData.phone1?.trim()) formDataToSend.append('phone1', formData.phone1.trim());
+      if (formData.phone2?.trim()) formDataToSend.append('phone2', formData.phone2.trim());
+      if (formData.email?.trim()) formDataToSend.append('email', formData.email.trim());
+      if (formData.gender) formDataToSend.append('gender', formData.gender);
+      if (formData.aadhar_card?.trim()) formDataToSend.append('aadhar_card', formData.aadhar_card.trim());
+      if (formData.pan_card?.trim()) formDataToSend.append('pan_card', formData.pan_card.trim());
+      if (formData.address?.trim()) formDataToSend.append('address', formData.address.trim());
+      if (formData.joining_date) formDataToSend.append('joining_date', formData.joining_date);
+      if (formData.birth_date) formDataToSend.append('birth_date', formData.birth_date);
+      if (selectedPages.length > 0) {
+        formDataToSend.append('access_pages', selectedPages.join(','));
+      }
+      if (formData.status) formDataToSend.append('status', formData.status);
+
       if (isEditMode && formData.emp_id) {
         formDataToSend.append('emp_id', formData.emp_id);
       }
@@ -373,6 +389,12 @@ export default function EmployeeForm() {
       // Append image if new image is selected
       if (imageFile) {
         formDataToSend.append('profile_image', imageFile);
+      }
+
+      // Log FormData contents for debugging
+      console.log('FormData entries:');
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(key, value);
       }
 
       let res;
@@ -389,6 +411,7 @@ export default function EmployeeForm() {
         toast({ title: "Error", description: res.message || "Operation failed", variant: "destructive" });
       }
     } catch (e: any) {
+      console.error('Submit error:', e);
       toast({ title: "Error", description: e?.response?.data?.message || "Something went wrong", variant: "destructive" });
     } finally {
       setSaving(false);
@@ -558,8 +581,8 @@ export default function EmployeeForm() {
                     variant={formData.gender === option.value ? "default" : "outline"}
                     className={`
                       rounded-xl px-4 h-9 flex-1 min-w-[80px] transition-all
-                      ${formData.gender === option.value 
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                      ${formData.gender === option.value
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                         : 'hover:bg-muted'
                       }
                     `}
@@ -624,7 +647,7 @@ export default function EmployeeForm() {
               <div>
                 <Label htmlFor="joining_date">Joining Date</Label>
                 <div className="relative mt-1.5">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="joining_date"
                     type="date"
@@ -638,7 +661,7 @@ export default function EmployeeForm() {
               <div>
                 <Label htmlFor="birth_date">Birth Date</Label>
                 <div className="relative mt-1.5">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="birth_date"
                     type="date"
@@ -768,7 +791,7 @@ export default function EmployeeForm() {
                 return (
                   <div key={group.name} className="rounded-xl border border-border overflow-hidden">
                     {/* Group Header */}
-                    <div 
+                    <div
                       className={`
                         flex items-center justify-between px-4 py-2.5 bg-muted/30 cursor-pointer transition-colors
                         ${!isViewMode && 'hover:bg-muted/50'}
@@ -778,7 +801,7 @@ export default function EmployeeForm() {
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium text-sm">{group.name}</span>
-                        <Badge 
+                        <Badge
                           variant={fullySelected ? "default" : partiallySelected ? "secondary" : "outline"}
                           className="text-xs"
                         >
@@ -807,8 +830,8 @@ export default function EmployeeForm() {
                           variant={selectedPages.includes(page.value) ? "default" : "outline"}
                           className={`
                             rounded-lg h-8 text-xs justify-start px-3 transition-all
-                            ${selectedPages.includes(page.value) 
-                              ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                            ${selectedPages.includes(page.value)
+                              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                               : 'hover:bg-muted'
                             }
                           `}

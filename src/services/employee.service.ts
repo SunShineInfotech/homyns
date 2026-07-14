@@ -60,6 +60,12 @@ export class EmployeeService extends BaseService {
    */
   async addEmployee(data: FormData): Promise<ApiResponse> {
     try {
+      // Log the FormData contents for debugging
+      console.log('Add employee - FormData entries:');
+      for (let [key, value] of data.entries()) {
+        console.log(key, value);
+      }
+      
       const response = await this.postFormData<ApiResponse>(data);
       return response;
     } catch (error: any) {

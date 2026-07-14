@@ -1,4 +1,5 @@
-// src/pages/QuotationEdit.tsx
+// src/pages/QuotationEdit.tsx - Complete updated file
+
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -23,6 +24,16 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { quotationService, Quotation } from "@/services/quotation.service";
 import {
@@ -30,6 +41,9 @@ import {
   QUOTATION_STATUSES,
   QuotationStatusHistory,
 } from "@/services/quotation-status.service";
+import { productService, Product } from "@/services/product.service";
+import { roomService, Room } from "@/services/room.service";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   ArrowLeft,
   Loader2,
@@ -45,17 +59,19 @@ import {
   RefreshCw,
   Clock,
   CheckCircle2,
-  AlertCircle,
   ChevronUp,
   ChevronDown,
   MapPin,
-  Calendar,
-  UserCheck,
-  IndianRupee as RupeeIcon,
-  Hash,
   CreditCard,
-  Briefcase,
+  Plus,
+  Minus,
+  Edit,
+  Trash2,
+  Check,
+  Calculator,
+  Home,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   Pending:
@@ -80,20 +96,65 @@ const STATUS_COLORS: Record<string, string> = {
     "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
 };
 
+const roundToTwo = (n: number) => Math.round(n * 100) / 100;
+
+// Helper to format number for display - shows empty string for 0
+const formatNumberForDisplay = (value: number | undefined | null): string => {
+  if (value === undefined || value === null || value === 0) {
+    return "";
+  }
+  return String(value);
+};
+
+// Helper to parse number from input - returns 0 if empty
+const parseNumberFromInput = (value: string): number => {
+  if (value === "" || value === null || value === undefined) {
+    return 0;
+  }
+  return parseFloat(value) || 0;
+};
+
 export default function QuotationEdit() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [quotation, setQuotation] = useState<Quotation | null>(null);
-  const [statusHistory, setStatusHistory] = useState<QuotationStatusHistory[]>(
-    [],
-  );
+  const [statusHistory, setStatusHistory] = useState<QuotationStatusHistory[]>([]);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("");
   const [statusRemark, setStatusRemark] = useState("");
   const [updating, setUpdating] = useState(false);
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
+
+  // Product edit state
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+
+  // Add Room Dialog
+  const [addRoomDialogOpen, setAddRoomDialogOpen] = useState(false);
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [selectedRoomToAdd, setSelectedRoomToAdd] = useState<string>("");
+  const [loadingRooms, setLoadingRooms] = useState(false);
+
+  // Add Product Dialog
+  const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
+  const [selectedRoomForProduct, setSelectedRoomForProduct] = useState<string>("");
+  const [selectedProductToAdd, setSelectedProductToAdd] = useState<string>("");
+  const [productQuantity, setProductQuantity] = useState(1);
+
+  // Discount & GST Edit
+  const [discountEditOpen, setDiscountEditOpen] = useState(false);
+  const [discountType, setDiscountType] = useState<"Percent" | "INR">("INR");
+  const [discountValue, setDiscountValue] = useState(0);
+  const [gstPercent, setGstPercent] = useState(0);
+  const [isGstApplicable, setIsGstApplicable] = useState(true);
+
+  // Confirm dialogs
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<{ qpId: string; productName: string } | null>(null);
+  const [confirmDeleteRoom, setConfirmDeleteRoom] = useState<{ qrId: string; roomName: string } | null>(null);
 
   const getCompanyId = (): string => {
     try {
@@ -125,7 +186,11 @@ export default function QuotationEdit() {
       if (quotationRes.status === "success" && quotationRes.data) {
         setQuotation(quotationRes.data);
         setSelectedStatus(quotationRes.data.status || "Pending");
-        // Expand first room by default
+        setDiscountType((quotationRes.data.discount_type as "Percent" | "INR") || "INR");
+        setDiscountValue(quotationRes.data.discount_value || 0);
+        setGstPercent(quotationRes.data.gst_percent || 0);
+        setIsGstApplicable(quotationRes.data.gst_applicable !== false);
+
         if (quotationRes.data.rooms && quotationRes.data.rooms.length > 0) {
           setExpandedRooms(new Set([quotationRes.data.rooms[0].qr_id]));
         }
@@ -154,8 +219,51 @@ export default function QuotationEdit() {
     }
   };
 
+  const fetchProducts = async () => {
+    setProductsLoading(true);
+    try {
+      const companyId = getCompanyId();
+      if (!companyId) return;
+      const res = await productService.getProducts(companyId);
+      if (res.status === "success" && res.data) {
+        setProducts(res.data);
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load products",
+        variant: "destructive",
+      });
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const fetchAvailableRooms = async () => {
+    setLoadingRooms(true);
+    try {
+      const companyId = getCompanyId();
+      if (!companyId) return;
+      const res = await roomService.getRooms(companyId);
+      if (res.status === "success" && res.data) {
+        const existingRoomIds = quotation?.rooms?.map((r: any) => r.room_id) || [];
+        const available = res.data.filter((r: any) => !existingRoomIds.includes(r.room_id));
+        setAvailableRooms(available);
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load rooms",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchProducts();
   }, [id]);
 
   const handleUpdateStatus = async () => {
@@ -231,25 +339,370 @@ export default function QuotationEdit() {
     return labels[type] || type;
   };
 
-  // Get client data from quotation
+  const calculateTotalMeasure = (item: any): number => {
+    const qty = item.qty || 1;
+    if (item.qty_type === "Fixed") return qty;
+
+    const toFt = (v: number) =>
+      (item.dimension_unit || "feet") === "feet" ? v : v / 12;
+    const h = toFt(item.height || 0);
+    const w = toFt(item.width || 0);
+    const d = toFt(item.depth || 0);
+    const l = toFt(item.length || 0);
+
+    let measure = 0;
+    if (item.qty_type === "ByHW") {
+      measure = w * h * qty;
+    } else if (item.qty_type === "ByHWD") {
+      measure = w * h * d * qty;
+    } else if (item.qty_type === "ByHWL") {
+      measure = w * h * l * qty;
+    } else {
+      measure = qty;
+    }
+    return roundToTwo(measure);
+  };
+
+  const calculateItemTotal = (item: any): number => {
+    const totalMeasure = calculateTotalMeasure(item);
+    const unitPrice = item.unit_price || 0;
+    return roundToTwo(totalMeasure * unitPrice);
+  };
+
+  // Handle edit item
+  const handleEditItem = (room: any, item: any) => {
+    setEditingItem({
+      ...item,
+      roomId: room.qr_id,
+      roomName: room.room_name,
+      qp_id: item.qp_id,
+      totalMeasure: calculateTotalMeasure(item),
+    });
+    setEditDialogOpen(true);
+  };
+
+  // Handle save item changes
+  const handleSaveItemEdit = async () => {
+    if (!editingItem || !quotation) return;
+
+    setSaving(true);
+    try {
+      const totalPrice = calculateItemTotal(editingItem);
+
+      if (!editingItem.qp_id) {
+        toast({
+          title: "Error",
+          description: "Product ID is missing",
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
+      }
+
+      const payload = {
+        type: 9,
+        quotation_id: quotation.quotation_id,
+        qp_id: editingItem.qp_id,
+        product_id: editingItem.product_id,
+        qty_type: editingItem.qty_type,
+        qty: editingItem.qty || 1,
+        height: editingItem.height || 0,
+        width: editingItem.width || 0,
+        depth: editingItem.depth || 0,
+        length: editingItem.length || 0,
+        dimension_unit: editingItem.dimension_unit || "feet",
+        unit_price: editingItem.unit_price || 0,
+        total_price: totalPrice,
+        remark: editingItem.remark || "",
+        company_id: getCompanyId(),
+      };
+
+      const res = await quotationService.updateQuotationProduct(payload);
+
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Item updated successfully" });
+        setEditDialogOpen(false);
+        await fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to update item",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle delete item
+  const handleDeleteItem = async () => {
+    if (!confirmDeleteItem || !quotation) return;
+
+    setSaving(true);
+    try {
+      const payload = {
+        type: 10,
+        quotation_id: quotation.quotation_id,
+        qp_id: confirmDeleteItem.qpId,
+        company_id: getCompanyId(),
+      };
+
+      const res = await quotationService.deleteQuotationProduct(payload);
+
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Item removed successfully" });
+        setConfirmDeleteItem(null);
+        await fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to remove item",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle add product to room
+  const handleAddProduct = async () => {
+    if (!quotation || !selectedRoomForProduct || !selectedProductToAdd) return;
+
+    const product = products.find((p) => p.product_id === selectedProductToAdd);
+    if (!product) {
+      toast({ title: "Error", description: "Product not found", variant: "destructive" });
+      return;
+    }
+
+    // Check if product already exists in this room
+    const room = quotation.rooms?.find((r: any) => r.qr_id === selectedRoomForProduct);
+    const existingProduct = room?.items?.find((i: any) => i.product_id === selectedProductToAdd);
+    if (existingProduct) {
+      toast({
+        title: "Error",
+        description: "This product is already added to this room",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        type: 8,
+        quotation_id: quotation.quotation_id,
+        qr_id: selectedRoomForProduct,
+        room_id: room?.room_id || "",
+        product_id: product.product_id,
+        qty_type: product.qty_type || "Fixed",
+        qty: productQuantity || 1,
+        height: product.height || 0,
+        width: product.width || 0,
+        depth: product.depth || 0,
+        length: product.length || 0,
+        dimension_unit: "inches",
+        unit_price: product.price || 0,
+        total_price: calculateItemTotal({
+          product_id: product.product_id,
+          qty_type: product.qty_type || "Fixed",
+          qty: productQuantity || 1,
+          height: product.height || 0,
+          width: product.width || 0,
+          depth: product.depth || 0,
+          length: product.length || 0,
+          dimension_unit: "inches",
+          unit_price: product.price || 0,
+        }),
+        remark: "",
+        company_id: getCompanyId(),
+      };
+
+      const res = await quotationService.addQuotationProduct(payload);
+
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Product added successfully" });
+        setAddProductDialogOpen(false);
+        setSelectedProductToAdd("");
+        setProductQuantity(1);
+        await fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add product",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle add room
+  const handleAddRoom = async () => {
+    if (!quotation || !selectedRoomToAdd) return;
+
+    setSaving(true);
+    try {
+      const payload = {
+        type: 11,
+        quotation_id: quotation.quotation_id,
+        room_id: selectedRoomToAdd,
+        company_id: getCompanyId(),
+      };
+
+      const res = await quotationService.addQuotationRoom(payload);
+
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Room added successfully" });
+        setAddRoomDialogOpen(false);
+        setSelectedRoomToAdd("");
+        await fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add room",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle delete room
+  const handleDeleteRoom = async () => {
+    if (!confirmDeleteRoom || !quotation) return;
+
+    setSaving(true);
+    try {
+      const payload = {
+        type: 12,
+        quotation_id: quotation.quotation_id,
+        qr_id: confirmDeleteRoom.qrId,
+        company_id: getCompanyId(),
+      };
+
+      const res = await quotationService.deleteQuotationRoom(payload);
+
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Room removed successfully" });
+        setConfirmDeleteRoom(null);
+        await fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to remove room",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle update discount & GST
+  const handleUpdateDiscountGst = async () => {
+    if (!quotation) return;
+
+    setSaving(true);
+    try {
+      const subtotal = quotation.subtotal || 0;
+      const discountAmount = discountType === "Percent"
+        ? (subtotal * discountValue) / 100
+        : discountValue;
+
+      const amountAfterDiscount = Math.max(0, subtotal - discountAmount);
+      const gstAmount = isGstApplicable ? (amountAfterDiscount * gstPercent) / 100 : 0;
+      const finalAmount = amountAfterDiscount + gstAmount;
+
+      const payload = {
+        type: 13,
+        quotation_id: quotation.quotation_id,
+        discount_type: discountType,
+        discount_value: discountValue,
+        discount_amount: discountAmount,
+        amount_after_discount: amountAfterDiscount,
+        gst_applicable: isGstApplicable ? 1 : 0,
+        gst_percent: gstPercent,
+        gst_amount: gstAmount,
+        final_amount: finalAmount,
+        company_id: getCompanyId(),
+      };
+
+      const res = await quotationService.updateQuotationDiscountGst(payload);
+
+      if (res.status === "success") {
+        toast({ title: "Success", description: "Discount and GST updated successfully" });
+        setDiscountEditOpen(false);
+        await fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to update discount and GST",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const clientData = quotation
     ? {
-        name: quotation.client_name || "—",
-        phone:
-          [
-            quotation.phone,
-            quotation.phone1,
-            quotation.phone2,
-            quotation.whatsapp_number,
-          ]
-            .filter(Boolean)
-            .join(", ") || "—",
-        email: quotation.email || quotation.client_email || "—",
-        address: quotation.address || quotation.address || "—",
-        city: quotation.city || quotation.client_city || "—",
-        state: quotation.state || quotation.client_state || "—",
-        gst: quotation.gst_number || quotation.client_gst || "—",
-      }
+      name: quotation.client_name || "—",
+      phone:
+        [
+          quotation.phone,
+          quotation.phone1,
+          quotation.phone2,
+          quotation.whatsapp_number,
+        ]
+          .filter(Boolean)
+          .join(", ") || "—",
+      email: quotation.email || quotation.client_email || "—",
+      address: quotation.address || "—",
+      city: quotation.city || quotation.client_city || "—",
+      state: quotation.state || quotation.client_state || "—",
+      gst: quotation.gst_number || quotation.client_gst || "—",
+    }
     : null;
 
   if (loading) {
@@ -278,6 +731,34 @@ export default function QuotationEdit() {
       </MainLayout>
     );
   }
+
+  // Get available products for a room (excluding already added ones)
+  const getAvailableProducts = (roomId: string) => {
+    const room = quotation.rooms?.find((r: any) => r.qr_id === roomId);
+    const addedProductIds = room?.items?.map((i: any) => i.product_id) || [];
+    return products.filter((p) => !addedProductIds.includes(p.product_id));
+  };
+
+  const openAddProductDialog = (roomId: string) => {
+    setSelectedRoomForProduct(roomId);
+    setSelectedProductToAdd("");
+    setProductQuantity(1);
+    setAddProductDialogOpen(true);
+  };
+
+  // Get dimension fields based on qty type
+  const getDimensionFields = (qtyType: string) => {
+    switch (qtyType) {
+      case "ByHW":
+        return { showHeight: true, showWidth: true, showDepth: false, showLength: false };
+      case "ByHWD":
+        return { showHeight: true, showWidth: true, showDepth: true, showLength: false };
+      case "ByHWL":
+        return { showHeight: true, showWidth: true, showDepth: false, showLength: true };
+      default:
+        return { showHeight: false, showWidth: false, showDepth: false, showLength: false };
+    }
+  };
 
   return (
     <MainLayout
@@ -310,13 +791,29 @@ export default function QuotationEdit() {
               {quotation.generated_by_name || "—"}
             </p>
           </div>
-          <Button
-            onClick={() => setStatusDialogOpen(true)}
-            className="gap-2 rounded-xl"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Change Status
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="gap-2 rounded-xl"
+              onClick={() => {
+                setDiscountEditOpen(true);
+                setDiscountType((quotation.discount_type as "Percent" | "INR") || "INR");
+                setDiscountValue(quotation.discount_value || 0);
+                setGstPercent(quotation.gst_percent || 0);
+                setIsGstApplicable(quotation.gst_applicable !== false);
+              }}
+            >
+              <Calculator className="w-4 h-4" />
+              Discount & GST
+            </Button>
+            <Button
+              onClick={() => setStatusDialogOpen(true)}
+              className="gap-2 rounded-xl"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Change Status
+            </Button>
+          </div>
         </div>
 
         {/* Summary Cards */}
@@ -353,11 +850,11 @@ export default function QuotationEdit() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Client Details - Full */}
+            {/* Client Details - READ ONLY */}
             <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <User className="w-4 h-4 text-primary" />
-                Client Details
+                Client Details <Badge variant="secondary" className="text-[10px]">Read Only</Badge>
               </h3>
               <div className="space-y-3">
                 <p className="font-semibold text-foreground text-lg">
@@ -396,11 +893,11 @@ export default function QuotationEdit() {
               </div>
             </Card>
 
-            {/* Package Details */}
+            {/* Package Details - READ ONLY */}
             <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <Package className="w-4 h-4 text-gold" />
-                Package Details
+                Package Details <Badge variant="secondary" className="text-[10px]">Read Only</Badge>
               </h3>
               {quotation.package_name ? (
                 <div>
@@ -420,12 +917,26 @@ export default function QuotationEdit() {
               )}
             </Card>
 
-            {/* Room-wise Breakdown */}
+            {/* Room-wise Breakdown with Edit */}
             <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-muted-foreground" />
-                Room-wise Breakdown
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                  Room-wise Breakdown
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 rounded-lg text-xs"
+                  onClick={() => {
+                    fetchAvailableRooms();
+                    setAddRoomDialogOpen(true);
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Room
+                </Button>
+              </div>
               {quotation.rooms && quotation.rooms.length > 0 ? (
                 <div className="space-y-4">
                   {quotation.rooms.map((room: any) => {
@@ -442,19 +953,32 @@ export default function QuotationEdit() {
                           className="flex items-center justify-between p-4 bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors"
                           onClick={() => toggleRoom(room.qr_id)}
                         >
-                          <div className="flex items-center gap-3">
-                            <Building2 className="w-4 h-4 text-muted-foreground" />
-                            <div>
-                              <h4 className="font-semibold text-foreground">
-                                {room.room_name ||
-                                  `Room ${room.sort_order + 1}`}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <div className="min-w-0">
+                              <h4 className="font-semibold text-foreground truncate">
+                                {room.room_name || `Room ${room.sort_order + 1}`}
                               </h4>
                               <p className="text-xs text-muted-foreground">
                                 {items.length} items
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteRoom({
+                                  qrId: room.qr_id,
+                                  roomName: room.room_name || `Room ${room.sort_order + 1}`,
+                                });
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                             <span className="font-semibold text-foreground">
                               {formatCurrency(roomTotal)}
                             </span>
@@ -466,31 +990,38 @@ export default function QuotationEdit() {
 
                         {isExpanded && (
                           <div className="p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-muted-foreground">Products</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 rounded-lg text-xs"
+                                onClick={() => openAddProductDialog(room.qr_id)}
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Product
+                              </Button>
+                            </div>
+
                             {items.map((item: any, idx: number) => {
-                              const calculatedQty =
-                                parseFloat(item.calculated_qty) || 0;
-                              const unitPrice =
-                                parseFloat(item.unit_price) || 0;
-                              const totalPrice =
-                                parseFloat(item.total_price) || 0;
+                              const calculatedQty = parseFloat(item.calculated_qty) || 0;
+                              const unitPrice = parseFloat(item.unit_price) || 0;
+                              const totalPrice = parseFloat(item.total_price) || 0;
                               const qtyType = item.qty_type || "Fixed";
-                              const isDimensionBased = qtyType !== "Fixed";
+                              const isFixedItem = qtyType === "Fixed";
 
                               return (
                                 <div
                                   key={item.qp_id || idx}
-                                  className="rounded-lg border border-border/50 p-4 bg-card"
+                                  className="rounded-lg border border-border/50 p-4 bg-card hover:border-primary/30 transition-colors"
                                 >
                                   <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                      <h5 className="font-semibold text-foreground">
+                                    <div className="flex-1 min-w-0">
+                                      <h5 className="font-semibold text-foreground truncate">
                                         {item.product_name}
                                       </h5>
                                       <div className="flex flex-wrap items-center gap-2 mt-1">
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[10px]"
-                                        >
+                                        <Badge variant="outline" className="text-[10px]">
                                           {getQtyTypeLabel(qtyType)}
                                         </Badge>
                                         {item.is_special === "1" && (
@@ -503,136 +1034,144 @@ export default function QuotationEdit() {
                                         )}
                                       </div>
                                     </div>
-                                    <div className="text-right">
-                                      <p className="font-bold text-primary">
-                                        {formatCurrency(totalPrice)}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        Unit: {formatCurrency(unitPrice)}
-                                      </p>
+                                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                                      <div className="text-right mr-2">
+                                        <p className="font-bold text-primary">
+                                          {formatCurrency(totalPrice)}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Unit: {formatCurrency(unitPrice)}
+                                        </p>
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                        onClick={() => handleEditItem(room, item)}
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                        onClick={() => {
+                                          setConfirmDeleteItem({
+                                            qpId: item.qp_id,
+                                            productName: item.product_name,
+                                          });
+                                        }}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
                                     </div>
                                   </div>
 
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm bg-muted/20 rounded-lg p-3 mb-3">
-                                    {isDimensionBased ? (
+                                    {isFixedItem ? (
                                       <>
                                         <div>
-                                          <span className="text-muted-foreground">
-                                            Height
-                                          </span>
-                                          <p className="font-medium">
-                                            {item.height || 0}{" "}
-                                            {item.dimension_unit || "ft"}
-                                          </p>
+                                          <span className="text-muted-foreground">Qty</span>
+                                          <p className="font-medium">{item.qty || 0}</p>
                                         </div>
                                         <div>
-                                          <span className="text-muted-foreground">
-                                            Width
-                                          </span>
-                                          <p className="font-medium">
-                                            {item.width || 0}{" "}
-                                            {item.dimension_unit || "ft"}
-                                          </p>
+                                          <span className="text-muted-foreground">Per</span>
+                                          <p className="font-medium">NOS</p>
                                         </div>
-                                        {qtyType === "ByHWD" && (
-                                          <div>
-                                            <span className="text-muted-foreground">
-                                              Depth
-                                            </span>
-                                            <p className="font-medium">
-                                              {item.depth || 0}{" "}
-                                              {item.dimension_unit || "ft"}
-                                            </p>
-                                          </div>
-                                        )}
-                                        {qtyType === "ByHWL" && (
-                                          <div>
-                                            <span className="text-muted-foreground">
-                                              Length
-                                            </span>
-                                            <p className="font-medium">
-                                              {item.length || 0}{" "}
-                                              {item.dimension_unit || "ft"}
-                                            </p>
-                                          </div>
-                                        )}
                                         <div>
-                                          <span className="text-muted-foreground">
-                                            Calculated Qty
-                                          </span>
-                                          <p className="font-medium">
-                                            {calculatedQty.toFixed(2)} sq.ft
-                                          </p>
+                                          <span className="text-muted-foreground">Measure</span>
+                                          <p className="font-medium">{calculatedQty.toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground">Rate</span>
+                                          <p className="font-medium">{formatCurrency(unitPrice)}</p>
                                         </div>
                                       </>
                                     ) : (
                                       <>
                                         <div>
-                                          <span className="text-muted-foreground">
-                                            Quantity
-                                          </span>
-                                          <p className="font-medium">
-                                            {item.qty || 0}
+                                          <span className="text-muted-foreground">Dimensions</span>
+                                          <p className="font-medium text-xs">
+                                            {(() => {
+                                              switch (qtyType) {
+                                                case "ByHW":
+                                                  return `${item.height || 0} × ${item.width || 0}`;
+                                                case "ByHWD":
+                                                  return `${item.height || 0} × ${item.width || 0} × ${item.depth || 0}`;
+                                                case "ByHWL":
+                                                  return `${item.height || 0} × ${item.width || 0} × ${item.length || 0}`;
+                                                default:
+                                                  return `${item.height || 0} × ${item.width || 0}`;
+                                              }
+                                            })()}
                                           </p>
                                         </div>
                                         <div>
-                                          <span className="text-muted-foreground">
-                                            Unit Price
-                                          </span>
-                                          <p className="font-medium">
-                                            {formatCurrency(unitPrice)}
-                                          </p>
+                                          <span className="text-muted-foreground">Per</span>
+                                          <p className="font-medium">SQFT</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground">Measure</span>
+                                          <p className="font-medium">{calculatedQty.toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground">Rate</span>
+                                          <p className="font-medium">{formatCurrency(unitPrice)}</p>
                                         </div>
                                       </>
                                     )}
                                   </div>
 
-                                  {item.raw_materials &&
-                                    item.raw_materials.length > 0 && (
-                                      <div className="bg-secondary/10 rounded-lg p-3">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                                          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                            Raw Materials
-                                          </p>
-                                          <Badge
-                                            variant="outline"
-                                            className="text-[9px] px-1.5 py-0"
-                                          >
-                                            {item.raw_materials.length}
-                                          </Badge>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                          {item.raw_materials.map(
-                                            (rm: any, rIdx: number) => (
-                                              <Badge
-                                                key={rIdx}
-                                                variant="secondary"
-                                                className="text-xs px-2 py-1 rounded-md"
-                                              >
-                                                {rm.rm_name ||
-                                                  rm.name ||
-                                                  "Material"}
-                                                {rm.required_qty &&
-                                                  ` (${parseFloat(rm.required_qty).toFixed(2)} ${rm.unit || ""})`}
-                                              </Badge>
-                                            ),
-                                          )}
-                                        </div>
+                                  {item.raw_materials && item.raw_materials.length > 0 && (
+                                    <div className="bg-secondary/10 rounded-lg p-3">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                          Raw Materials
+                                        </p>
+                                        <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                          {item.raw_materials.length}
+                                        </Badge>
                                       </div>
-                                    )}
+                                      <div className="flex flex-wrap gap-2">
+                                        {item.raw_materials.map((rm: any, rIdx: number) => (
+                                          <Badge
+                                            key={rIdx}
+                                            variant="secondary"
+                                            className="text-xs px-2 py-1 rounded-md"
+                                          >
+                                            {rm.rm_name || rm.name || "Material"}
+                                            {rm.required_qty &&
+                                              ` (${parseFloat(rm.required_qty).toFixed(2)} ${rm.unit || ""})`}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 
                                   {item.remark && (
                                     <div className="mt-2 text-xs text-muted-foreground">
-                                      <span className="font-medium">
-                                        Remark:
-                                      </span>{" "}
-                                      {item.remark}
+                                      <span className="font-medium">Remark:</span> {item.remark}
                                     </div>
                                   )}
                                 </div>
                               );
                             })}
+
+                            {items.length === 0 && (
+                              <div className="text-center py-6 text-muted-foreground">
+                                <p className="text-sm">No items in this room</p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-2 gap-1"
+                                  onClick={() => openAddProductDialog(room.qr_id)}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  Add Product
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -640,24 +1179,69 @@ export default function QuotationEdit() {
                   })}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center py-4">
-                  No items found
-                </p>
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No rooms found</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 gap-1"
+                    onClick={() => {
+                      fetchAvailableRooms();
+                      setAddRoomDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Room
+                  </Button>
+                </div>
               )}
             </Card>
 
-            {/* Special Instructions */}
-            {quotation.remark && (
-              <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
-                <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  Special Instructions
-                </h3>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {quotation.remark}
-                </p>
-              </Card>
-            )}
+            {/* Special Instructions - Editable */}
+            <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
+              <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                Special Instructions
+              </h3>
+              <Textarea
+                value={quotation.remark || ""}
+                onChange={(e) => {
+                  setQuotation({ ...quotation, remark: e.target.value });
+                }}
+                placeholder="Add special instructions..."
+                rows={3}
+                className="rounded-xl"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 gap-1"
+                onClick={async () => {
+                  if (!quotation) return;
+                  setSaving(true);
+                  try {
+                    const res = await quotationService.updateQuotationRemark({
+                      quotation_id: quotation.quotation_id,
+                      remark: quotation.remark || "",
+                      company_id: getCompanyId(),
+                    });
+                    if (res.status === "success") {
+                      toast({ title: "Success", description: "Instructions updated" });
+                    } else {
+                      toast({ title: "Error", description: res.message, variant: "destructive" });
+                    }
+                  } catch (e: any) {
+                    toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                disabled={saving}
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Save Instructions
+              </Button>
+            </Card>
           </div>
 
           {/* Right Column */}
@@ -686,9 +1270,7 @@ export default function QuotationEdit() {
                 )}
                 {quotation.discount_amount > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      After Discount
-                    </span>
+                    <span className="text-muted-foreground">After Discount</span>
                     <span className="font-medium">
                       {formatCurrency(quotation.amount_after_discount || 0)}
                     </span>
@@ -716,9 +1298,7 @@ export default function QuotationEdit() {
               <div className="mt-4 pt-4 border-t border-border space-y-1.5 text-xs text-muted-foreground">
                 <div className="flex justify-between">
                   <span>Quotation ID</span>
-                  <span className="font-mono">
-                    {quotation.quotation_number}
-                  </span>
+                  <span className="font-mono">{quotation.quotation_number}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Created</span>
@@ -844,6 +1424,624 @@ export default function QuotationEdit() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Item Dialog with Price Breakdown and conditional dimensions */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+            <DialogDescription>
+              Edit product details for {editingItem?.product_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingItem && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Qty Type</Label>
+                  <Select
+                    value={editingItem.qty_type || "Fixed"}
+                    onValueChange={(v) => {
+                      const updated = { ...editingItem, qty_type: v };
+                      updated.totalMeasure = calculateTotalMeasure(updated);
+                      setEditingItem(updated);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 rounded-lg text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Fixed">Fixed</SelectItem>
+                      <SelectItem value="ByHW">H × W</SelectItem>
+                      <SelectItem value="ByHWD">H × W × D</SelectItem>
+                      <SelectItem value="ByHWL">H × W × L</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Unit</Label>
+                  <Select
+                    value={editingItem.dimension_unit || "feet"}
+                    onValueChange={(v) => {
+                      const updated = { ...editingItem, dimension_unit: v };
+                      updated.totalMeasure = calculateTotalMeasure(updated);
+                      setEditingItem(updated);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 rounded-lg text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="feet">Feet</SelectItem>
+                      <SelectItem value="inches">Inches</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Conditional Dimension Fields based on qty_type */}
+              {editingItem.qty_type !== "Fixed" && (
+                <div className="grid grid-cols-2 gap-2">
+                  {(() => {
+                    const fields = getDimensionFields(editingItem.qty_type);
+                    return (
+                      <>
+                        {fields.showHeight && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Height</Label>
+                            <Input
+                              type="number"
+                              value={formatNumberForDisplay(editingItem.height)}
+                              onChange={(e) => {
+                                const val = parseNumberFromInput(e.target.value);
+                                const updated = { ...editingItem, height: val };
+                                updated.totalMeasure = calculateTotalMeasure(updated);
+                                setEditingItem(updated);
+                              }}
+                              className="h-9 rounded-lg text-sm"
+                              min="0"
+                              step="0.01"
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+                        {fields.showWidth && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Width</Label>
+                            <Input
+                              type="number"
+                              value={formatNumberForDisplay(editingItem.width)}
+                              onChange={(e) => {
+                                const val = parseNumberFromInput(e.target.value);
+                                const updated = { ...editingItem, width: val };
+                                updated.totalMeasure = calculateTotalMeasure(updated);
+                                setEditingItem(updated);
+                              }}
+                              className="h-9 rounded-lg text-sm"
+                              min="0"
+                              step="0.01"
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+                        {fields.showDepth && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Depth</Label>
+                            <Input
+                              type="number"
+                              value={formatNumberForDisplay(editingItem.depth)}
+                              onChange={(e) => {
+                                const val = parseNumberFromInput(e.target.value);
+                                const updated = { ...editingItem, depth: val };
+                                updated.totalMeasure = calculateTotalMeasure(updated);
+                                setEditingItem(updated);
+                              }}
+                              className="h-9 rounded-lg text-sm"
+                              min="0"
+                              step="0.01"
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+                        {fields.showLength && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Length</Label>
+                            <Input
+                              type="number"
+                              value={formatNumberForDisplay(editingItem.length)}
+                              onChange={(e) => {
+                                const val = parseNumberFromInput(e.target.value);
+                                const updated = { ...editingItem, length: val };
+                                updated.totalMeasure = calculateTotalMeasure(updated);
+                                setEditingItem(updated);
+                              }}
+                              className="h-9 rounded-lg text-sm"
+                              min="0"
+                              step="0.01"
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Quantity</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      disabled={editingItem.qty <= 1}
+                      onClick={() => {
+                        const updated = { ...editingItem, qty: Math.max(1, (editingItem.qty || 1) - 1) };
+                        updated.totalMeasure = calculateTotalMeasure(updated);
+                        setEditingItem(updated);
+                      }}
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <span className="flex-1 text-center font-semibold text-sm">
+                      {editingItem.qty || 1}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg"
+                      onClick={() => {
+                        const updated = { ...editingItem, qty: (editingItem.qty || 1) + 1 };
+                        updated.totalMeasure = calculateTotalMeasure(updated);
+                        setEditingItem(updated);
+                      }}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Unit Price (₹)</Label>
+                  <Input
+                    type="number"
+                    value={formatNumberForDisplay(editingItem.unit_price)}
+                    onChange={(e) => {
+                      const val = parseNumberFromInput(e.target.value);
+                      const updated = { ...editingItem, unit_price: val };
+                      setEditingItem(updated);
+                    }}
+                    className="h-9 rounded-lg text-sm"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Remark</Label>
+                <Textarea
+                  value={editingItem.remark || ""}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, remark: e.target.value })
+                  }
+                  placeholder="Any specific requirement..."
+                  rows={2}
+                  className="rounded-lg text-sm resize-none"
+                />
+              </div>
+
+              {/* Price Breakdown - Detailed */}
+              <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl p-4 border border-primary/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calculator className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-semibold text-primary uppercase tracking-wider">
+                    Price Breakdown
+                  </span>
+                </div>
+
+                {editingItem.qty_type !== "Fixed" ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Measure</span>
+                      <span className="font-mono font-medium">
+                        {(() => {
+                          const measure = calculateTotalMeasure(editingItem);
+                          return `${measure.toFixed(2)} sq.ft`;
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Unit Price</span>
+                      <span className="font-mono font-medium">
+                        ₹{roundToTwo(editingItem.unit_price || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Formula</span>
+                      <span className="font-mono font-medium text-[10px]">
+                        {editingItem.qty_type === "ByHW" && "W × H × Qty"}
+                        {editingItem.qty_type === "ByHWD" && "W × H × D × Qty"}
+                        {editingItem.qty_type === "ByHWL" && "W × H × L × Qty"}
+                      </span>
+                    </div>
+                    <div className="border-t border-primary/20 pt-2 mt-1">
+                      <div className="flex justify-between text-base font-bold text-primary">
+                        <span>Final Amount</span>
+                        <span>
+                          ₹{Math.round(calculateItemTotal(editingItem)).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Unit Price</span>
+                      <span className="font-mono font-medium">
+                        ₹{roundToTwo(editingItem.unit_price || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Quantity</span>
+                      <span className="font-mono font-medium">
+                        × {editingItem.qty || 1}
+                      </span>
+                    </div>
+                    <div className="border-t border-primary/20 pt-2 mt-1">
+                      <div className="flex justify-between text-base font-bold text-primary">
+                        <span>Total</span>
+                        <span>
+                          ₹{Math.round(calculateItemTotal(editingItem)).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 flex-1 sm:flex-none"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl h-10 flex-1 sm:flex-none gap-2"
+              onClick={handleSaveItemEdit}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" /> Save Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Room Dialog */}
+      <Dialog open={addRoomDialogOpen} onOpenChange={setAddRoomDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Room</DialogTitle>
+            <DialogDescription>
+              Select a room to add to this quotation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {loadingRooms ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : availableRooms.length === 0 ? (
+              <p className="text-center text-muted-foreground text-sm py-4">
+                No rooms available to add. All rooms are already in this quotation.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {availableRooms.map((room) => (
+                  <div
+                    key={room.room_id}
+                    onClick={() => setSelectedRoomToAdd(room.room_id || "")}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all",
+                      selectedRoomToAdd === room.room_id
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50 hover:bg-secondary/30"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Home className="w-5 h-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium text-foreground">{room.room_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {room.description || "No description"}
+                        </p>
+                      </div>
+                    </div>
+                    {selectedRoomToAdd === room.room_id && (
+                      <Check className="w-5 h-5 text-primary" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 flex-1 sm:flex-none"
+              onClick={() => {
+                setAddRoomDialogOpen(false);
+                setSelectedRoomToAdd("");
+              }}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl h-10 flex-1 sm:flex-none gap-2"
+              onClick={handleAddRoom}
+              disabled={saving || !selectedRoomToAdd || loadingRooms}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" /> Add Room
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Product Dialog */}
+      <Dialog open={addProductDialogOpen} onOpenChange={setAddProductDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Product</DialogTitle>
+            <DialogDescription>
+              Select a product to add to this room.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Product</Label>
+              <SearchableSelect
+                options={getAvailableProducts(selectedRoomForProduct).map((p) => ({
+                  value: p.product_id || "",
+                  label: `${p.product_name} (${p.category_name || "No Category"})`,
+                }))}
+                value={selectedProductToAdd}
+                onChange={setSelectedProductToAdd}
+                placeholder="Search and select product..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Quantity</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 rounded-lg"
+                  onClick={() => setProductQuantity(Math.max(1, productQuantity - 1))}
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <span className="text-lg font-semibold w-12 text-center">
+                  {productQuantity}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 rounded-lg"
+                  onClick={() => setProductQuantity(productQuantity + 1)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 flex-1 sm:flex-none"
+              onClick={() => {
+                setAddProductDialogOpen(false);
+                setSelectedProductToAdd("");
+                setProductQuantity(1);
+              }}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl h-10 flex-1 sm:flex-none gap-2"
+              onClick={handleAddProduct}
+              disabled={saving || !selectedProductToAdd}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" /> Add Product
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Discount & GST Edit Dialog */}
+      <Dialog open={discountEditOpen} onOpenChange={setDiscountEditOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Discount & GST</DialogTitle>
+            <DialogDescription>
+              Update discount and GST for this quotation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Discount Type</Label>
+              <Select
+                value={discountType}
+                onValueChange={(v) => setDiscountType(v as "Percent" | "INR")}
+              >
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INR">Fixed Amount (₹)</SelectItem>
+                  <SelectItem value="Percent">Percentage (%)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>
+                {discountType === "Percent" ? "Discount Percentage (%)" : "Discount Amount (₹)"}
+              </Label>
+              <Input
+                type="number"
+                value={formatNumberForDisplay(discountValue)}
+                onChange={(e) => {
+                  const val = parseNumberFromInput(e.target.value);
+                  setDiscountValue(val);
+                }}
+                className="h-11 rounded-xl"
+                min="0"
+                step={discountType === "Percent" ? "0.1" : "1"}
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>GST Percentage (%)</Label>
+              <Input
+                type="number"
+                value={formatNumberForDisplay(gstPercent)}
+                onChange={(e) => {
+                  const val = parseNumberFromInput(e.target.value);
+                  setGstPercent(val);
+                }}
+                className="h-11 rounded-xl"
+                min="0"
+                step="0.1"
+                placeholder="0"
+              />
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <input
+                type="checkbox"
+                id="gstApplicable"
+                checked={isGstApplicable}
+                onChange={(e) => setIsGstApplicable(e.target.checked)}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <Label htmlFor="gstApplicable" className="cursor-pointer">
+                GST Applicable
+              </Label>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 flex-1 sm:flex-none"
+              onClick={() => setDiscountEditOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl h-10 flex-1 sm:flex-none gap-2"
+              onClick={handleUpdateDiscountGst}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" /> Save Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Delete Item */}
+      <AlertDialog
+        open={!!confirmDeleteItem}
+        onOpenChange={() => setConfirmDeleteItem(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove "{confirmDeleteItem?.productName}" from this quotation?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteItem}
+              disabled={saving}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Delete Room */}
+      <AlertDialog
+        open={!!confirmDeleteRoom}
+        onOpenChange={() => setConfirmDeleteRoom(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Room</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove "{confirmDeleteRoom?.roomName}" from this quotation?
+              All items in this room will also be removed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRoom}
+              disabled={saving}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }

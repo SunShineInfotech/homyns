@@ -21,6 +21,13 @@ export interface Lead {
   converted_client_id?: string;
   is_deleted?: string;
   c_date?: string;
+  // NEW FIELDS from PHP
+  project_name?: string;
+  house_number?: string;
+  project_type_id?: string;
+  person_name?: string;
+  light_bill?: string;
+  light_load?: string;
   // Joined fields
   state_name?: string;
   city_name?: string;
@@ -28,6 +35,9 @@ export interface Lead {
   source_name?: string;
   assigned_emp_name?: string;
   status_name?: string;
+  project_type_name?: string;
+  is_converted?: boolean;
+  lead_added_by?: string;
 }
 
 export interface LeadFollowup {
@@ -47,15 +57,27 @@ export interface LeadFollowup {
   lead_name?: string;
 }
 
+export interface LeadFilters {
+  employee_id?: string;
+  start_date?: string;
+  end_date?: string;
+  lead_id?: string;
+}
+
 export class LeadService extends BaseService {
   constructor() {
     super('lead.php');
   }
 
   /**
-   * Get all leads for a company
+   * Get all leads for a company with filters
    */
-  async getLeads(companyId: string, type: 'all' | 'my' = 'all', empId?: string): Promise<ApiResponse<Lead[]>> {
+  async getLeads(
+    companyId: string, 
+    type: 'all' | 'my' = 'all', 
+    empId?: string,
+    filters?: LeadFilters
+  ): Promise<ApiResponse<Lead[]>> {
     try {
       const payload: any = {
         type: 3,
@@ -64,6 +86,11 @@ export class LeadService extends BaseService {
       };
       if (empId) {
         payload.emp_id = empId;
+      }
+      if (filters) {
+        if (filters.employee_id) payload.filter_employee_id = filters.employee_id;
+        if (filters.start_date) payload.start_date = filters.start_date;
+        if (filters.end_date) payload.end_date = filters.end_date;
       }
       const response = await this.post<ApiResponse<Lead[]>>(payload);
       
@@ -157,6 +184,45 @@ export class LeadService extends BaseService {
       return {
         status: 'error',
         message: error.response?.data?.message || 'Failed to delete lead'
+      };
+    }
+  }
+
+  /**
+   * Convert lead to client
+   */
+  async convertToClient(leadId: string): Promise<ApiResponse> {
+    try {
+      const response = await this.post<ApiResponse>({
+        type: 6,
+        lead_id: leadId
+      });
+      return response;
+    } catch (error: any) {
+      console.error('Convert lead error:', error);
+      return {
+        status: 'error',
+        message: error.response?.data?.message || 'Failed to convert lead'
+      };
+    }
+  }
+
+  /**
+   * Transfer leads to another employee
+   */
+  async transferLeads(leadIds: string[], targetEmployeeId: string): Promise<ApiResponse> {
+    try {
+      const response = await this.post<ApiResponse>({
+        type: 7,
+        lead_ids: leadIds,
+        target_employee_id: targetEmployeeId
+      });
+      return response;
+    } catch (error: any) {
+      console.error('Transfer leads error:', error);
+      return {
+        status: 'error',
+        message: error.response?.data?.message || 'Failed to transfer leads'
       };
     }
   }

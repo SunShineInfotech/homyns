@@ -116,6 +116,8 @@ export default function ProductForm() {
   const [addCategoryDialog, setAddCategoryDialog] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryDescription, setNewCategoryDescription] = useState("");
+  const [newCategoryImage, setNewCategoryImage] = useState<File | null>(null);
+  const [newCategoryImagePreview, setNewCategoryImagePreview] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
 
   const API_URL =
@@ -354,6 +356,29 @@ export default function ProductForm() {
     setProductDetails((prev) => prev.filter((_, i) => i !== index));
 
   // ── Add Category ──────────────────────────────────────────────────────────
+  const handleCategoryImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast({ title: "Error", description: "Please select an image file", variant: "destructive" });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "Error", description: "Image must be under 5 MB", variant: "destructive" });
+        return;
+      }
+      setNewCategoryImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setNewCategoryImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveCategoryImage = () => {
+    setNewCategoryImage(null);
+    setNewCategoryImagePreview("");
+  };
+
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
       toast({
@@ -367,11 +392,14 @@ export default function ProductForm() {
     setAddingCategory(true);
     try {
       const companyId = getCompanyId();
-      const res = await productCategoryService.addCategory({
-        company_id: companyId,
-        category_name: newCategoryName.trim(),
-        description: newCategoryDescription.trim() || "",
-      });
+      const fd = new FormData();
+      fd.append("type", "1");
+      fd.append("company_id", companyId);
+      fd.append("category_name", newCategoryName.trim());
+      fd.append("description", newCategoryDescription.trim() || "");
+      if (newCategoryImage) fd.append("category_image", newCategoryImage);
+
+      const res = await productCategoryService.addCategory(fd);
 
       if (res.status === "success") {
         toast({
@@ -380,6 +408,8 @@ export default function ProductForm() {
         });
         setNewCategoryName("");
         setNewCategoryDescription("");
+        setNewCategoryImage(null);
+        setNewCategoryImagePreview("");
         setAddCategoryDialog(false);
         // Refresh categories list
         const updatedRes =
@@ -548,9 +578,6 @@ export default function ProductForm() {
   return (
     <MainLayout title={title} subtitle={subtitle}>
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        {/* ── Header ── */}
-        
-
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* ── Basic Info Card ── */}
           <div className="bg-card rounded-2xl border p-5 md:p-6 space-y-4">
@@ -790,36 +817,40 @@ export default function ProductForm() {
               </div>
             </div>
 
-            {/* Description + Status */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description || ""}
-                  onChange={(e) =>
-                    setFormData((p) => ({ ...p, description: e.target.value }))
-                  }
-                  className="min-h-[80px] rounded-xl resize-y"
-                  placeholder="Product description..."
-                  disabled={isViewMode}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <SearchableSelect
-                  options={STATUS_OPTIONS}
-                  value={formData.status || "Active"}
-                  onChange={(v) => setFormData((p) => ({ ...p, status: v }))}
-                  placeholder="Select status..."
-                  disabled={isViewMode}
-                />
-              </div>
+            {/* Description - Optional */}
+            <div className="space-y-1.5">
+              <Label htmlFor="description">
+                Description <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+              </Label>
+              <Textarea
+                id="description"
+                value={formData.description || ""}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, description: e.target.value }))
+                }
+                className="min-h-[80px] rounded-xl resize-y"
+                placeholder="Product description (optional)"
+                disabled={isViewMode}
+              />
             </div>
 
-            {/* Image */}
+            {/* Status */}
             <div className="space-y-1.5">
-              <Label>Product Image</Label>
+              <Label>Status</Label>
+              <SearchableSelect
+                options={STATUS_OPTIONS}
+                value={formData.status || "Active"}
+                onChange={(v) => setFormData((p) => ({ ...p, status: v }))}
+                placeholder="Select status..."
+                disabled={isViewMode}
+              />
+            </div>
+
+            {/* Image - Optional */}
+            <div className="space-y-1.5">
+              <Label>
+                Product Image <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+              </Label>
               {imageUrl ? (
                 <div className="flex items-start gap-4 p-3 bg-muted/30 rounded-xl border">
                   <div className="relative shrink-0">
@@ -869,10 +900,9 @@ export default function ProductForm() {
                       h-36 w-full rounded-xl border-2 border-dashed
                       flex flex-col items-center justify-center gap-1.5
                       transition-all duration-200 cursor-pointer select-none
-                      ${
-                        isDragging
-                          ? "border-primary bg-primary/8 scale-[1.01]"
-                          : "border-muted-foreground/25 bg-muted/10 hover:bg-muted/20 hover:border-muted-foreground/40"
+                      ${isDragging
+                        ? "border-primary bg-primary/8 scale-[1.01]"
+                        : "border-muted-foreground/25 bg-muted/10 hover:bg-muted/20 hover:border-muted-foreground/40"
                       }
                     `}
                     onClick={() => fileInputRef.current?.click()}
@@ -898,7 +928,7 @@ export default function ProductForm() {
                           </span>
                         </p>
                         <p className="text-xs text-muted-foreground/50">
-                          JPG, PNG, WEBP · Max 5 MB
+                          JPG, PNG, WEBP · Max 5 MB <span className="text-muted-foreground/30">(optional)</span>
                         </p>
                       </>
                     )}
@@ -1341,7 +1371,7 @@ export default function ProductForm() {
 
       {/* ── Add Category Dialog ── */}
       <Dialog open={addCategoryDialog} onOpenChange={setAddCategoryDialog}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
+        <DialogContent className="sm:max-w-md rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Category</DialogTitle>
             <DialogDescription>
@@ -1383,12 +1413,72 @@ export default function ProductForm() {
                 placeholder="Brief description of the category..."
               />
             </div>
+            <div>
+              <Label>
+                Category Image{" "}
+                <span className="text-muted-foreground text-xs font-normal">
+                  (Required)
+                </span>
+              </Label>
+              {newCategoryImagePreview ? (
+                <div className="flex items-start gap-4 p-3 bg-muted/30 rounded-xl border mt-1.5">
+                  <div className="relative shrink-0">
+                    <img
+                      src={newCategoryImagePreview}
+                      alt="New category"
+                      className="h-20 w-20 object-cover rounded-xl border shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveCategoryImage}
+                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 shadow-md hover:bg-destructive/90 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1 pt-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {newCategoryImage?.name || "Image"}
+                    </p>
+                    {newCategoryImage && (
+                      <p className="text-xs text-muted-foreground">
+                        {(newCategoryImage.size / 1024).toFixed(1)} KB
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="h-24 w-full rounded-xl border-2 border-dashed border-muted-foreground/25 
+                    flex flex-col items-center justify-center gap-0.5 cursor-pointer
+                    hover:bg-muted/20 hover:border-muted-foreground/40 transition-all duration-200 mt-1.5"
+                  onClick={() => document.getElementById("categoryImageInput")?.click()}
+                >
+                  <Upload className="h-6 w-6 text-muted-foreground/50" />
+                  <p className="text-xs text-muted-foreground">Click to upload image</p>
+                  <p className="text-[10px] text-muted-foreground/50">JPG, PNG, WEBP · Max 5 MB</p>
+                </div>
+              )}
+              <input
+                id="categoryImageInput"
+                type="file"
+                accept="image/*"
+                onChange={handleCategoryImageChange}
+                className="hidden"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               className="rounded-xl h-11"
-              onClick={() => setAddCategoryDialog(false)}
+              onClick={() => {
+                setAddCategoryDialog(false);
+                setNewCategoryName("");
+                setNewCategoryDescription("");
+                setNewCategoryImage(null);
+                setNewCategoryImagePreview("");
+              }}
               disabled={addingCategory}
             >
               Cancel

@@ -8,10 +8,9 @@ import { cn } from "@/lib/utils";
 import {
   Sofa, Bed, ChefHat, DoorOpen, Baby, Briefcase,
   Check, ChevronRight, Loader2, SkipForward, Home,
-  Package,
+  Package, Plus, ChevronLeft
 } from "lucide-react";
-import { roomService, Room } from "@/services/room.service";
-import { productService } from "@/services/product.service";
+import { quotationFilterService, QuotationRoom } from "@/services/quotation_filter.service";
 import { toast } from "@/hooks/use-toast";
 import { getQuotationData, saveQuotationData } from "../CreateQuotation";
 
@@ -49,6 +48,7 @@ export default function StepRooms() {
     } catch {
       return "";
     }
+    return "";
   };
 
   const fetchData = async () => {
@@ -57,82 +57,91 @@ export default function StepRooms() {
       const companyId = getCompanyId();
       if (!companyId) {
         toast({ title: "Error", description: "Company not found", variant: "destructive" });
+        setLoading(false);
         return;
       }
 
-      // Fetch fresh products first to get updated names and prices
-      const productsRes = await productService.getProducts(companyId);
-      const productsMap = new Map();
-      if (productsRes.status === "success" && productsRes.data) {
-        productsRes.data.forEach((p: any) => {
-          productsMap.set(p.product_id, {
-            name: p.product_name,
-            price: parseFloat(p.price) || 0,
-            qty_type: p.qty_type || 'Fixed',
-            height: parseFloat(p.height) || 0,
-            width: parseFloat(p.width) || 0,
-            depth: parseFloat(p.depth) || 0,
-            length: parseFloat(p.length) || 0,
-          });
-        });
+      // Get saved quotation data to get selected package
+      const saved = getQuotationData();
+      const selectedPackage = saved?.selectedPackage;
+
+      if (!selectedPackage || !selectedPackage.package_id) {
+        toast({ title: "Info", description: "Please select a package first" });
+        navigate("/create-quotation/package");
+        setLoading(false);
+        return;
       }
 
-      // Fetch rooms
-      const res = await roomService.getRooms(companyId);
+      // Fetch full quotation data using the new service
+      const res = await quotationFilterService.getFullQuotationData(
+        companyId,
+        selectedPackage.package_id
+      );
+
       if (res.status === "success" && res.data) {
-        const roomList = res.data.map((room: any) => {
-          const sortedProducts = room.room_products 
-            ? [...room.room_products].sort((a: any, b: any) => 
-                parseInt(a.sort_order || 0) - parseInt(b.sort_order || 0)
-              )
-            : [];
+        const quotationData = res.data;
+        const packageRooms = quotationData.rooms || [];
+
+        // Transform rooms to the format expected by the component
+        const roomList = packageRooms.map((room: QuotationRoom) => {
+          const products = room.products || [];
           
-          // Map products with fresh data
-          const mappedProducts = sortedProducts.map((product: any) => {
-            const freshProduct = productsMap.get(product.product_id);
-            return {
-              id: product.rp_id || `item_${Date.now()}`,
-              product_id: product.product_id,
-              name: freshProduct?.name || product.product_name || 'Unknown Product',
-              default_qty: parseFloat(product.default_qty) || 1,
-              quantity: parseFloat(product.default_qty) || 1,
-              price: freshProduct?.price || 0,
-              total_price: 0,
-              included: true,
-              category_name: product.category_name || '',
-              sort_order: parseInt(product.sort_order) || 0,
-              qty_type: freshProduct?.qty_type || 'Fixed',
-              height: freshProduct?.height || 0,
-              width: freshProduct?.width || 0,
-              depth: freshProduct?.depth || 0,
-              length: freshProduct?.length || 0,
-            };
-          });
+          // Map products with proper structure
+          const mappedProducts = products.map((product: any) => ({
+            id: product.rp_id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            product_id: product.product_id,
+            name: product.product_name || 'Unknown Product',
+            default_qty: product.default_qty || 1,
+            quantity: product.default_qty || 1,
+            price: product.price || 0,
+            total_price: 0,
+            included: true,
+            category_name: product.category_name || '',
+            sort_order: product.sort_order || 0,
+            qty_type: product.qty_type || 'Fixed',
+            height: product.height || 0,
+            width: product.width || 0,
+            depth: product.depth || 0,
+            length: product.length || 0,
+          }));
 
           return {
-            id: room.room_id!,
-            room_id: room.room_id!,
+            id: room.room_id,
+            room_id: room.room_id,
             name: room.room_name,
-            icon: room.icon || 'doorOpen',
+            icon: 'doorOpen',
             description: room.description || '',
             image: room.image || '',
-            room_products: sortedProducts,
+            room_products: products,
             items: mappedProducts,
+            selected: true, // All rooms from package are selected
             room_total: mappedProducts
               .filter((i: any) => i.included)
               .reduce((sum: number, i: any) => sum + (i.price || 0), 0),
           };
         });
-        
+
         setRooms(roomList);
         if (roomList.length > 0) {
           setExpandedRooms([roomList[0].id]);
         }
+
+        // Save the rooms data
+        saveQuotationData({ rooms: roomList, expandedRooms: [] });
       } else {
-        toast({ title: "Error", description: res.message || "Failed to load rooms", variant: "destructive" });
+        toast({ 
+          title: "Error", 
+          description: res.message || "Failed to load rooms", 
+          variant: "destructive" 
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.response?.data?.message || "Something went wrong", variant: "destructive" });
+      console.error('Fetch error:', e);
+      toast({ 
+        title: "Error", 
+        description: e?.response?.data?.message || "Something went wrong", 
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
@@ -154,6 +163,14 @@ export default function StepRooms() {
     saveQuotationData({ rooms: [], expandedRooms: [] });
     navigate("/create-quotation/items");
     toast({ title: "Skipped", description: "Rooms selection skipped" });
+  };
+
+  const handleNext = () => {
+    if (rooms.length === 0) {
+      toast({ title: "Please select at least one room", variant: "destructive" });
+      return;
+    }
+    navigate("/create-quotation/items");
   };
 
   // Save rooms to quotation data when they change
@@ -178,11 +195,17 @@ export default function StepRooms() {
           <Home className="w-10 h-10 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-semibold mb-2">No Rooms Available</h3>
-        <p className="text-muted-foreground mb-4">No rooms have been created yet. You can skip this step.</p>
-        <Button onClick={handleSkip} className="gap-2">
-          <SkipForward className="w-4 h-4" />
-          Skip to Items
-        </Button>
+        <p className="text-muted-foreground mb-4">This package has no rooms assigned.</p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Button onClick={() => navigate("/create-quotation/package")} className="gap-2">
+            <ChevronLeft className="w-4 h-4" />
+            Go Back to Packages
+          </Button>
+          <Button variant="outline" onClick={handleSkip} className="gap-2">
+            <SkipForward className="w-4 h-4" />
+            Skip to Items
+          </Button>
+        </div>
       </div>
     );
   }
@@ -192,9 +215,6 @@ export default function StepRooms() {
       <div className="text-center mb-8">
         <h2 className="text-2xl font-display font-semibold text-foreground mb-2">Rooms Included</h2>
         <p className="text-muted-foreground">Review the rooms and their products</p>
-        <Button variant="ghost" size="sm" onClick={handleSkip} className="mt-2 gap-1">
-          <SkipForward className="w-3 h-3" /> Skip this step
-        </Button>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -298,6 +318,7 @@ export default function StepRooms() {
           );
         })}
       </div>
+
     </div>
   );
 }

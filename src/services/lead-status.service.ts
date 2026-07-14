@@ -5,6 +5,8 @@ export interface LeadStatus {
   status_id?: string;
   company_id?: string;
   status_name: string;
+  font_color?: string;
+  background_color?: string;
   is_deleted?: string;
   c_date?: string;
 }
@@ -40,14 +42,21 @@ export class LeadStatusService extends BaseService {
   }
 
   /**
-   * Add a new lead status
+   * Add a new lead status with colors
    */
-  async addLeadStatus(data: { company_id: string; status_name: string }): Promise<ApiResponse> {
+  async addLeadStatus(data: { 
+    company_id: string; 
+    status_name: string;
+    font_color?: string;
+    background_color?: string;
+  }): Promise<ApiResponse> {
     try {
       const payload = {
         type: 1,
         company_id: data.company_id,
-        status_name: data.status_name
+        status_name: data.status_name,
+        font_color: data.font_color || '#ffffff',
+        background_color: data.background_color || '#6b7280'
       };
       
       console.log('Adding lead status payload:', payload);
@@ -64,14 +73,21 @@ export class LeadStatusService extends BaseService {
   }
 
   /**
-   * Update an existing lead status
+   * Update an existing lead status with colors
    */
-  async updateLeadStatus(data: { status_id: string; status_name: string }): Promise<ApiResponse> {
+  async updateLeadStatus(data: { 
+    status_id: string; 
+    status_name: string;
+    font_color?: string;
+    background_color?: string;
+  }): Promise<ApiResponse> {
     try {
       const payload = {
         type: 2,
         status_id: data.status_id,
-        status_name: data.status_name
+        status_name: data.status_name,
+        font_color: data.font_color || '#ffffff',
+        background_color: data.background_color || '#6b7280'
       };
       
       console.log('Update lead status payload:', payload);

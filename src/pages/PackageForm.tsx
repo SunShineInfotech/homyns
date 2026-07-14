@@ -217,10 +217,10 @@ export default function PackageForm() {
       return;
     }
 
-    if (!formData.completion_days || formData.completion_days <= 0) {
-      setFormError("Completion days must be greater than 0.");
-      return;
-    }
+    // if (!formData.completion_days || formData.completion_days <= 0) {
+    //   setFormError("Completion days must be greater than 0.");
+    //   return;
+    // }
 
     setFormError("");
     setSaving(true);
@@ -337,8 +337,8 @@ export default function PackageForm() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4" >
+              <div style={{display:'none'}}>
                 <Label htmlFor="completion_days">
                   Completion Days <span className="text-destructive">*</span>
                 </Label>
@@ -346,12 +346,13 @@ export default function PackageForm() {
                   id="completion_days"
                   type="number"
                   value={formData.completion_days || 0}
-                  onChange={(e) => setFormData((p) => ({ ...p, completion_days: parseInt(e.target.value) || 0 }))}
-                  className="h-11 rounded-xl mt-1.5"
-                  min="1"
-                  placeholder="e.g. 30"
-                  disabled={isViewMode}
-                  required
+                  // onChange={(e) => setFormData((p) => ({ ...p, completion_days: parseInt(e.target.value) || 0 }))}
+                  // className="h-11 rounded-xl mt-1.5"
+                  // min="1"
+                  // placeholder="e.g. 30"
+                  // disabled={isViewMode}
+                  disabled
+                  
                 />
                 <p className="text-xs text-muted-foreground mt-1">Estimated number of days to complete the project</p>
               </div>
