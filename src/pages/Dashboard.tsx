@@ -358,7 +358,7 @@ export default function Dashboard() {
                 <h2 className="text-xl md:text-2xl font-display font-semibold mb-1">How To Use</h2>
                 <p className="text-primary-foreground/85 text-sm md:text-base">Learn how to create, customize, and share professional quotations in just a few simple steps.</p>
               </div>
-              <Button onClick={() => navigate("/how-to-use")} size="lg" className="bg-white text-primary hover:bg-white/90 rounded-xl gap-2 shadow-lg shrink-0">
+              <Button onClick={() => navigate("/HowToUse")} size="lg" className="bg-white text-primary hover:bg-white/90 rounded-xl gap-2 shadow-lg shrink-0">
                 <Plus className="w-5 h-5" /> View Guide
               </Button>
             </div>
