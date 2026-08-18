@@ -23,7 +23,10 @@ import { areaService, Area } from "@/services/area.service";
 import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
 import { employeeService, Employee } from "@/services/employee.service";
-import { projectTypeService, ProjectType } from "@/services/project-type.service";
+import {
+  projectTypeService,
+  ProjectType,
+} from "@/services/project-type.service";
 import {
   ArrowLeft,
   Save,
@@ -36,7 +39,6 @@ import {
   Plus,
   Building2,
   Home,
-  DollarSign,
 } from "lucide-react";
 
 const EMPTY_FORM: Partial<Lead> = {
@@ -109,7 +111,9 @@ export default function LeadForm() {
     try {
       const raw = localStorage.getItem("company_data");
       if (raw) return JSON.parse(raw)?.company_id || "";
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
     return "";
   };
 
@@ -117,7 +121,9 @@ export default function LeadForm() {
     try {
       const raw = localStorage.getItem("user_data");
       if (raw) return JSON.parse(raw)?.emp_id || "";
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
     return "";
   };
 
@@ -128,11 +134,23 @@ export default function LeadForm() {
       try {
         const companyId = getCompanyId();
         if (!companyId) {
-          toast({ title: "Error", description: "Company not found", variant: "destructive" });
+          toast({
+            title: "Error",
+            description: "Company not found",
+            variant: "destructive",
+          });
           return;
         }
 
-        const [statesRes, citiesRes, areasRes, sourcesRes, statusesRes, employeesRes, projectTypesRes] = await Promise.all([
+        const [
+          statesRes,
+          citiesRes,
+          areasRes,
+          sourcesRes,
+          statusesRes,
+          employeesRes,
+          projectTypesRes,
+        ] = await Promise.all([
           stateService.getStates(companyId),
           cityService.getCities(companyId),
           areaService.getAreas(companyId),
@@ -146,16 +164,26 @@ export default function LeadForm() {
         if (citiesRes.status === "success") setCities(citiesRes.data || []);
         if (areasRes.status === "success") setAreas(areasRes.data || []);
         if (sourcesRes.status === "success") setSources(sourcesRes.data || []);
-        if (statusesRes.status === "success") setStatuses(statusesRes.data || []);
-        if (employeesRes.status === "success") setEmployees(employeesRes.data || []);
-        if (projectTypesRes.status === "success") setProjectTypes(projectTypesRes.data || []);
+        if (statusesRes.status === "success")
+          setStatuses(statusesRes.data || []);
+        if (employeesRes.status === "success")
+          setEmployees(employeesRes.data || []);
+        if (projectTypesRes.status === "success")
+          setProjectTypes(projectTypesRes.data || []);
 
         // Auto-select first status if available
         if (!isEditMode && statusesRes.data?.length > 0) {
-          setFormData(prev => ({ ...prev, status: statusesRes.data[0].status_id }));
+          setFormData((prev) => ({
+            ...prev,
+            status: statusesRes.data[0].status_id,
+          }));
         }
       } catch (e: any) {
-        toast({ title: "Error", description: "Failed to load master data", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: "Failed to load master data",
+          variant: "destructive",
+        });
       } finally {
         setLoadingMasters(false);
       }
@@ -173,11 +201,19 @@ export default function LeadForm() {
           if (res.status === "success" && res.data) {
             setFormData(res.data);
           } else {
-            toast({ title: "Error", description: res.message || "Failed to fetch lead", variant: "destructive" });
+            toast({
+              title: "Error",
+              description: res.message || "Failed to fetch lead",
+              variant: "destructive",
+            });
             navigate(returnPath);
           }
         } catch (e: any) {
-          toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+          toast({
+            title: "Error",
+            description: e?.message || "Something went wrong",
+            variant: "destructive",
+          });
           navigate(returnPath);
         } finally {
           setLoading(false);
@@ -190,7 +226,11 @@ export default function LeadForm() {
   // Add handlers
   const handleAddState = async () => {
     if (!newStateName.trim()) {
-      toast({ title: "Error", description: "State name is required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "State name is required",
+        variant: "destructive",
+      });
       return;
     }
     setAddingNew(true);
@@ -206,16 +246,26 @@ export default function LeadForm() {
         const updatedRes = await stateService.getStates(getCompanyId());
         if (updatedRes.status === "success" && updatedRes.data) {
           setStates(updatedRes.data);
-          const newState = updatedRes.data.find(s => s.state_name === newStateName.trim());
+          const newState = updatedRes.data.find(
+            (s) => s.state_name === newStateName.trim(),
+          );
           if (newState?.state_id) {
-            setFormData(p => ({ ...p, state_id: newState.state_id }));
+            setFormData((p) => ({ ...p, state_id: newState.state_id }));
           }
         }
       } else {
-        toast({ title: "Error", description: res.message || "Failed to add state", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add state",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setAddingNew(false);
     }
@@ -223,7 +273,11 @@ export default function LeadForm() {
 
   const handleAddCity = async () => {
     if (!newCityName.trim() || !newCityStateId) {
-      toast({ title: "Error", description: "City name and state are required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "City name and state are required",
+        variant: "destructive",
+      });
       return;
     }
     setAddingNew(true);
@@ -241,16 +295,26 @@ export default function LeadForm() {
         const updatedRes = await cityService.getCities(getCompanyId());
         if (updatedRes.status === "success" && updatedRes.data) {
           setCities(updatedRes.data);
-          const newCity = updatedRes.data.find(c => c.city_name === newCityName.trim());
+          const newCity = updatedRes.data.find(
+            (c) => c.city_name === newCityName.trim(),
+          );
           if (newCity?.city_id) {
-            setFormData(p => ({ ...p, city_id: newCity.city_id }));
+            setFormData((p) => ({ ...p, city_id: newCity.city_id }));
           }
         }
       } else {
-        toast({ title: "Error", description: res.message || "Failed to add city", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add city",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setAddingNew(false);
     }
@@ -258,7 +322,11 @@ export default function LeadForm() {
 
   const handleAddArea = async () => {
     if (!newAreaName.trim() || !newAreaCityId) {
-      toast({ title: "Error", description: "Area name and city are required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Area name and city are required",
+        variant: "destructive",
+      });
       return;
     }
     setAddingNew(true);
@@ -276,16 +344,26 @@ export default function LeadForm() {
         const updatedRes = await areaService.getAreas(getCompanyId());
         if (updatedRes.status === "success" && updatedRes.data) {
           setAreas(updatedRes.data);
-          const newArea = updatedRes.data.find(a => a.area_name === newAreaName.trim());
+          const newArea = updatedRes.data.find(
+            (a) => a.area_name === newAreaName.trim(),
+          );
           if (newArea?.area_id) {
-            setFormData(p => ({ ...p, area_id: newArea.area_id }));
+            setFormData((p) => ({ ...p, area_id: newArea.area_id }));
           }
         }
       } else {
-        toast({ title: "Error", description: res.message || "Failed to add area", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add area",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setAddingNew(false);
     }
@@ -293,7 +371,11 @@ export default function LeadForm() {
 
   const handleAddSource = async () => {
     if (!newSourceName.trim()) {
-      toast({ title: "Error", description: "Source name is required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Source name is required",
+        variant: "destructive",
+      });
       return;
     }
     setAddingNew(true);
@@ -306,19 +388,30 @@ export default function LeadForm() {
         toast({ title: "Success", description: "Source added successfully" });
         setNewSourceName("");
         setAddSourceDialog(false);
-        const updatedRes = await leadSourceService.getLeadSources(getCompanyId());
+        const updatedRes =
+          await leadSourceService.getLeadSources(getCompanyId());
         if (updatedRes.status === "success" && updatedRes.data) {
           setSources(updatedRes.data);
-          const newSource = updatedRes.data.find(s => s.source_name === newSourceName.trim());
+          const newSource = updatedRes.data.find(
+            (s) => s.source_name === newSourceName.trim(),
+          );
           if (newSource?.source_id) {
-            setFormData(p => ({ ...p, source_id: newSource.source_id }));
+            setFormData((p) => ({ ...p, source_id: newSource.source_id }));
           }
         }
       } else {
-        toast({ title: "Error", description: res.message || "Failed to add source", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add source",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setAddingNew(false);
     }
@@ -326,7 +419,11 @@ export default function LeadForm() {
 
   const handleAddStatus = async () => {
     if (!newStatusName.trim()) {
-      toast({ title: "Error", description: "Status name is required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Status name is required",
+        variant: "destructive",
+      });
       return;
     }
     setAddingNew(true);
@@ -339,19 +436,30 @@ export default function LeadForm() {
         toast({ title: "Success", description: "Status added successfully" });
         setNewStatusName("");
         setAddStatusDialog(false);
-        const updatedRes = await leadStatusService.getLeadStatuses(getCompanyId());
+        const updatedRes =
+          await leadStatusService.getLeadStatuses(getCompanyId());
         if (updatedRes.status === "success" && updatedRes.data) {
           setStatuses(updatedRes.data);
-          const newStatus = updatedRes.data.find(s => s.status_name === newStatusName.trim());
+          const newStatus = updatedRes.data.find(
+            (s) => s.status_name === newStatusName.trim(),
+          );
           if (newStatus?.status_id) {
-            setFormData(p => ({ ...p, status: newStatus.status_id }));
+            setFormData((p) => ({ ...p, status: newStatus.status_id }));
           }
         }
       } else {
-        toast({ title: "Error", description: res.message || "Failed to add status", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add status",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setAddingNew(false);
     }
@@ -359,7 +467,11 @@ export default function LeadForm() {
 
   const handleAddProjectType = async () => {
     if (!newProjectTypeName.trim()) {
-      toast({ title: "Error", description: "Project type name is required", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Project type name is required",
+        variant: "destructive",
+      });
       return;
     }
     setAddingNew(true);
@@ -369,22 +481,39 @@ export default function LeadForm() {
         project_type_name: newProjectTypeName.trim(),
       });
       if (res.status === "success") {
-        toast({ title: "Success", description: "Project type added successfully" });
+        toast({
+          title: "Success",
+          description: "Project type added successfully",
+        });
         setNewProjectTypeName("");
         setAddProjectTypeDialog(false);
-        const updatedRes = await projectTypeService.getProjectTypes(getCompanyId());
+        const updatedRes =
+          await projectTypeService.getProjectTypes(getCompanyId());
         if (updatedRes.status === "success" && updatedRes.data) {
           setProjectTypes(updatedRes.data);
-          const newType = updatedRes.data.find(p => p.project_type_name === newProjectTypeName.trim());
+          const newType = updatedRes.data.find(
+            (p) => p.project_type_name === newProjectTypeName.trim(),
+          );
           if (newType?.project_type_id) {
-            setFormData(p => ({ ...p, project_type_id: newType.project_type_id }));
+            setFormData((p) => ({
+              ...p,
+              project_type_id: newType.project_type_id,
+            }));
           }
         }
       } else {
-        toast({ title: "Error", description: res.message || "Failed to add project type", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Failed to add project type",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setAddingNew(false);
     }
@@ -393,6 +522,8 @@ export default function LeadForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Only these 5 fields are required: Lead Name, Phone, Lead Source, Assigned To, Status.
+    // Everything else on the form is optional.
     if (!formData.lead_name?.trim()) {
       setFormError("Lead name is required.");
       nameInputRef.current?.focus();
@@ -400,6 +531,30 @@ export default function LeadForm() {
     }
     if (!formData.phone1?.trim()) {
       setFormError("Phone number is required.");
+      return;
+    }
+    if (!formData.source_id) {
+      setFormError("Lead source is required.");
+      return;
+    }
+    if (!formData.assigned_to) {
+      setFormError("Assigned To is required.");
+      return;
+    }
+    if (!formData.status) {
+      setFormError("Status is required.");
+      return;
+    }
+    if (!formData.state_id) {
+      setFormError("State is required.");
+      return;
+    }
+    if (!formData.city_id) {
+      setFormError("City is required.");
+      return;
+    }
+    if (!formData.area_id) {
+      setFormError("Area is required.");
       return;
     }
 
@@ -426,6 +581,7 @@ export default function LeadForm() {
         budget: formData.budget || 0,
         assigned_to: formData.assigned_to || empId,
         status: formData.status || "",
+        status_name: formData.status_name || "",
         project_name: formData.project_name || "",
         house_number: formData.house_number || "",
         project_type_id: formData.project_type_id || "",
@@ -439,14 +595,27 @@ export default function LeadForm() {
       }
 
       if (res.status === "success") {
-        toast({ title: "Success", description: isEditMode ? "Lead updated successfully" : "Lead added successfully" });
+        toast({
+          title: "Success",
+          description: isEditMode
+            ? "Lead updated successfully"
+            : "Lead added successfully",
+        });
         // Navigate back to the page we came from
         navigate(returnPath);
       } else {
-        toast({ title: "Error", description: res.message || "Operation failed", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: res.message || "Operation failed",
+          variant: "destructive",
+        });
       }
     } catch (e: any) {
-      toast({ title: "Error", description: e?.message || "Something went wrong", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: e?.message || "Something went wrong",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -458,7 +627,10 @@ export default function LeadForm() {
 
   if (loading || loadingMasters) {
     return (
-      <MainLayout title={isEditMode ? "Edit Lead" : "Add Lead"} subtitle="Loading...">
+      <MainLayout
+        title={isEditMode ? "Edit Lead" : "Add Lead"}
+        subtitle="Loading..."
+      >
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -468,36 +640,45 @@ export default function LeadForm() {
 
   // Options with "Add New" option
   const stateOptions = [
-    ...states.map(s => ({ value: s.state_id || "", label: s.state_name })),
+    ...states.map((s) => ({ value: s.state_id || "", label: s.state_name })),
     { value: "__add_new__", label: "+ Add New State" },
   ];
 
   const cityOptions = [
-    ...cities.map(c => ({ value: c.city_id || "", label: c.city_name })),
+    ...cities.map((c) => ({ value: c.city_id || "", label: c.city_name })),
     { value: "__add_new__", label: "+ Add New City" },
   ];
 
   const areaOptions = [
-    ...areas.map(a => ({ value: a.area_id || "", label: a.area_name })),
+    ...areas.map((a) => ({ value: a.area_id || "", label: a.area_name })),
     { value: "__add_new__", label: "+ Add New Area" },
   ];
 
   const sourceOptions = [
-    ...sources.map(s => ({ value: s.source_id || "", label: s.source_name })),
+    ...sources.map((s) => ({ value: s.source_id || "", label: s.source_name })),
     { value: "__add_new__", label: "+ Add New Source" },
   ];
 
   const statusOptions = [
-    ...statuses.map(s => ({ value: s.status_id || "", label: s.status_name })),
+    ...statuses.map((s) => ({
+      value: s.status_name || "",
+      label: s.status_name || "",
+    })),
     { value: "__add_new__", label: "+ Add New Status" },
   ];
 
   const projectTypeOptions = [
-    ...projectTypes.map(p => ({ value: p.project_type_id || "", label: p.project_type_name })),
+    ...projectTypes.map((p) => ({
+      value: p.project_type_id || "",
+      label: p.project_type_name,
+    })),
     { value: "__add_new__", label: "+ Add New Project Type" },
   ];
 
-  const employeeOptions = employees.map(e => ({ value: e.emp_id || "", label: e.name || e.emp_name || "" }));
+  const employeeOptions = employees.map((e) => ({
+    value: e.emp_id || "",
+    label: e.name || e.name || "",
+  }));
 
   // Handle select changes with add new
   const handleStateSelect = (value: string) => {
@@ -505,7 +686,7 @@ export default function LeadForm() {
       setAddStateDialog(true);
       return;
     }
-    setFormData(p => ({ ...p, state_id: value }));
+    setFormData((p) => ({ ...p, state_id: value }));
   };
 
   const handleCitySelect = (value: string) => {
@@ -513,7 +694,7 @@ export default function LeadForm() {
       setAddCityDialog(true);
       return;
     }
-    setFormData(p => ({ ...p, city_id: value }));
+    setFormData((p) => ({ ...p, city_id: value }));
   };
 
   const handleAreaSelect = (value: string) => {
@@ -521,7 +702,7 @@ export default function LeadForm() {
       setAddAreaDialog(true);
       return;
     }
-    setFormData(p => ({ ...p, area_id: value }));
+    setFormData((p) => ({ ...p, area_id: value }));
   };
 
   const handleSourceSelect = (value: string) => {
@@ -529,7 +710,7 @@ export default function LeadForm() {
       setAddSourceDialog(true);
       return;
     }
-    setFormData(p => ({ ...p, source_id: value }));
+    setFormData((p) => ({ ...p, source_id: value }));
   };
 
   const handleStatusSelect = (value: string) => {
@@ -537,7 +718,7 @@ export default function LeadForm() {
       setAddStatusDialog(true);
       return;
     }
-    setFormData(p => ({ ...p, status: value }));
+    setFormData((p) => ({ ...p, status: value, status_name: value }));
   };
 
   const handleProjectTypeSelect = (value: string) => {
@@ -545,7 +726,7 @@ export default function LeadForm() {
       setAddProjectTypeDialog(true);
       return;
     }
-    setFormData(p => ({ ...p, project_type_id: value }));
+    setFormData((p) => ({ ...p, project_type_id: value }));
   };
 
   // Determine the back button label based on where we came from
@@ -556,10 +737,17 @@ export default function LeadForm() {
   };
 
   return (
-    <MainLayout title={isEditMode ? "Edit Lead" : "Add Lead"} subtitle={isEditMode ? "Update lead information" : "Add new lead"}>
-      <div className="p-4 md:p-6 max-w-4xl mx-auto">
+    <MainLayout
+      title={isEditMode ? "Edit Lead" : "Add Lead"}
+      subtitle={isEditMode ? "Update lead information" : "Add new lead"}
+    >
+      <div className="p-4 md:p-6 max-w-1xl mx-auto">
         {!isViewMode && (
-          <Button variant="outline" className="gap-2 rounded-xl mb-4" onClick={handleCancel}>
+          <Button
+            variant="outline"
+            className="gap-2 rounded-xl mb-4"
+            onClick={handleCancel}
+          >
             <ArrowLeft className="h-4 w-4" /> {getBackLabel()}
           </Button>
         )}
@@ -574,26 +762,35 @@ export default function LeadForm() {
             {/* Name & Phone */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="lead_name">Lead Name <span className="text-destructive">*</span></Label>
+                <Label htmlFor="lead_name">
+                  Lead Name <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   ref={nameInputRef}
                   id="lead_name"
                   value={formData.lead_name || ""}
-                  onChange={(e) => setFormData(p => ({ ...p, lead_name: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, lead_name: e.target.value }))
+                  }
                   className="h-11 rounded-xl mt-1.5"
                   placeholder="Enter lead name"
                   disabled={isViewMode}
                 />
               </div>
               <div>
-                <Label htmlFor="phone1">Phone <span className="text-destructive">*</span></Label>
+                <Label htmlFor="phone1">
+                  Phone <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="phone1"
                   value={formData.phone1 || ""}
-                  onChange={(e) => setFormData(p => ({ ...p, phone1: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, phone1: e.target.value }))
+                  }
                   className="h-11 rounded-xl mt-1.5"
                   placeholder="Enter phone number"
                   disabled={isViewMode}
+                  maxLength={10}
                 />
               </div>
             </div>
@@ -605,10 +802,13 @@ export default function LeadForm() {
                 <Input
                   id="phone2"
                   value={formData.phone2 || ""}
-                  onChange={(e) => setFormData(p => ({ ...p, phone2: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, phone2: e.target.value }))
+                  }
                   className="h-11 rounded-xl mt-1.5"
                   placeholder="Enter alternate phone"
                   disabled={isViewMode}
+                  maxLength={10}
                 />
               </div>
               <div>
@@ -616,10 +816,16 @@ export default function LeadForm() {
                 <Input
                   id="whatsapp_number"
                   value={formData.whatsapp_number || ""}
-                  onChange={(e) => setFormData(p => ({ ...p, whatsapp_number: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      whatsapp_number: e.target.value,
+                    }))
+                  }
                   className="h-11 rounded-xl mt-1.5"
                   placeholder="Enter WhatsApp number"
                   disabled={isViewMode}
+                  maxLength={10}
                 />
               </div>
             </div>
@@ -633,7 +839,9 @@ export default function LeadForm() {
                   id="email"
                   type="email"
                   value={formData.email || ""}
-                  onChange={(e) => setFormData(p => ({ ...p, email: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, email: e.target.value }))
+                  }
                   className="h-11 rounded-xl pl-10"
                   placeholder="Enter email address"
                   disabled={isViewMode}
@@ -650,7 +858,12 @@ export default function LeadForm() {
                   <Input
                     id="project_name"
                     value={formData.project_name || ""}
-                    onChange={(e) => setFormData(p => ({ ...p, project_name: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        project_name: e.target.value,
+                      }))
+                    }
                     className="h-11 rounded-xl pl-10"
                     placeholder="Enter project name"
                     disabled={isViewMode}
@@ -664,7 +877,12 @@ export default function LeadForm() {
                   <Input
                     id="house_number"
                     value={formData.house_number || ""}
-                    onChange={(e) => setFormData(p => ({ ...p, house_number: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        house_number: e.target.value,
+                      }))
+                    }
                     className="h-11 rounded-xl pl-10"
                     placeholder="Enter house number"
                     disabled={isViewMode}
@@ -694,7 +912,9 @@ export default function LeadForm() {
                 <Textarea
                   id="address"
                   value={formData.address || ""}
-                  onChange={(e) => setFormData(p => ({ ...p, address: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, address: e.target.value }))
+                  }
                   className="min-h-[80px] rounded-xl pl-10 resize-y"
                   placeholder="Enter address"
                   disabled={isViewMode}
@@ -705,7 +925,9 @@ export default function LeadForm() {
             {/* Location: State, City, Area */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label>State</Label>
+                <Label>
+                  State <span className="text-destructive">*</span>
+                </Label>
                 <div className="mt-1.5">
                   <SearchableSelect
                     options={stateOptions}
@@ -717,7 +939,9 @@ export default function LeadForm() {
                 </div>
               </div>
               <div>
-                <Label>City</Label>
+                <Label>
+                  City <span className="text-destructive">*</span>
+                </Label>
                 <div className="mt-1.5">
                   <SearchableSelect
                     options={cityOptions}
@@ -729,7 +953,9 @@ export default function LeadForm() {
                 </div>
               </div>
               <div>
-                <Label>Area</Label>
+                <Label>
+                  Area <span className="text-destructive">*</span>
+                </Label>
                 <div className="mt-1.5">
                   <SearchableSelect
                     options={areaOptions}
@@ -752,7 +978,9 @@ export default function LeadForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label>Lead Source</Label>
+                <Label>
+                  Lead Source <span className="text-destructive">*</span>
+                </Label>
                 <div className="mt-1.5">
                   <SearchableSelect
                     options={sourceOptions}
@@ -764,7 +992,9 @@ export default function LeadForm() {
                 </div>
               </div>
               <div>
-                <Label>Status</Label>
+                <Label>
+                  Status <span className="text-destructive">*</span>
+                </Label>
                 <div className="mt-1.5">
                   <SearchableSelect
                     options={statusOptions}
@@ -780,28 +1010,34 @@ export default function LeadForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="budget">Budget</Label>
-                <div className="relative mt-1.5">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="budget"
-                    type="number"
-                    value={formData.budget || 0}
-                    onChange={(e) => setFormData(p => ({ ...p, budget: parseFloat(e.target.value) || 0 }))}
-                    className="h-11 rounded-xl pl-10"
-                    placeholder="Enter budget"
-                    min="0"
-                    step="0.01"
-                    disabled={isViewMode}
-                  />
-                </div>
+                <Input
+                  id="budget"
+                  type="number"
+                  value={formData.budget || 0}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      budget: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  className="h-11 rounded-xl mt-1.5"
+                  placeholder="Enter budget"
+                  min="0"
+                  step="0.01"
+                  disabled={isViewMode}
+                />
               </div>
               <div>
-                <Label>Assigned To</Label>
+                <Label>
+                  Assigned To <span className="text-destructive">*</span>
+                </Label>
                 <div className="mt-1.5">
                   <SearchableSelect
                     options={employeeOptions}
                     value={formData.assigned_to || ""}
-                    onChange={(v) => setFormData(p => ({ ...p, assigned_to: v }))}
+                    onChange={(v) =>
+                      setFormData((p) => ({ ...p, assigned_to: v }))
+                    }
                     placeholder="Assign to employee..."
                     disabled={isViewMode}
                   />
@@ -814,7 +1050,9 @@ export default function LeadForm() {
               <Textarea
                 id="requirement"
                 value={formData.requirement || ""}
-                onChange={(e) => setFormData(p => ({ ...p, requirement: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, requirement: e.target.value }))
+                }
                 className="min-h-[80px] rounded-xl mt-1.5 resize-y"
                 placeholder="Describe the lead's requirement..."
                 disabled={isViewMode}
@@ -830,17 +1068,39 @@ export default function LeadForm() {
 
           {!isViewMode && (
             <div className="flex gap-3">
-              <Button type="submit" className="rounded-xl h-11 px-6 gap-2" disabled={saving}>
-                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Save className="h-4 w-4" /> {isEditMode ? "Update Lead" : "Add Lead"}</>}
+              <Button
+                type="submit"
+                className="rounded-xl h-11 px-6 gap-2"
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />{" "}
+                    {isEditMode ? "Update Lead" : "Add Lead"}
+                  </>
+                )}
               </Button>
-              <Button type="button" variant="outline" className="rounded-xl h-11 px-6" onClick={handleCancel}>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl h-11 px-6"
+                onClick={handleCancel}
+              >
                 Cancel
               </Button>
             </div>
           )}
 
           {isViewMode && (
-            <Button type="button" className="rounded-xl h-11 px-6" onClick={handleCancel}>
+            <Button
+              type="button"
+              className="rounded-xl h-11 px-6"
+              onClick={handleCancel}
+            >
               {getBackLabel()}
             </Button>
           )}
@@ -852,7 +1112,9 @@ export default function LeadForm() {
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add New State</DialogTitle>
-            <DialogDescription>Enter the name for the new state.</DialogDescription>
+            <DialogDescription>
+              Enter the name for the new state.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Label htmlFor="newStateName">State Name</Label>
@@ -860,18 +1122,38 @@ export default function LeadForm() {
               id="newStateName"
               value={newStateName}
               onChange={(e) => setNewStateName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddState(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddState();
+                }
+              }}
               className="h-11 rounded-xl mt-1.5"
               placeholder="e.g. Gujarat"
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddStateDialog(false)} disabled={addingNew}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-11"
+              onClick={() => setAddStateDialog(false)}
+              disabled={addingNew}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl h-11 gap-2" onClick={handleAddState} disabled={addingNew}>
-              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add State"}
+            <Button
+              className="rounded-xl h-11 gap-2"
+              onClick={handleAddState}
+              disabled={addingNew}
+            >
+              {addingNew ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                "Add State"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -882,7 +1164,9 @@ export default function LeadForm() {
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add New City</DialogTitle>
-            <DialogDescription>Enter the details for the new city.</DialogDescription>
+            <DialogDescription>
+              Enter the details for the new city.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div>
@@ -899,7 +1183,10 @@ export default function LeadForm() {
             <div>
               <Label>State</Label>
               <SearchableSelect
-                options={states.map(s => ({ value: s.state_id || "", label: s.state_name }))}
+                options={states.map((s) => ({
+                  value: s.state_id || "",
+                  label: s.state_name,
+                }))}
                 value={newCityStateId}
                 onChange={(v) => setNewCityStateId(v)}
                 placeholder="Select state..."
@@ -907,11 +1194,26 @@ export default function LeadForm() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddCityDialog(false)} disabled={addingNew}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-11"
+              onClick={() => setAddCityDialog(false)}
+              disabled={addingNew}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl h-11 gap-2" onClick={handleAddCity} disabled={addingNew}>
-              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add City"}
+            <Button
+              className="rounded-xl h-11 gap-2"
+              onClick={handleAddCity}
+              disabled={addingNew}
+            >
+              {addingNew ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                "Add City"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -922,7 +1224,9 @@ export default function LeadForm() {
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add New Area</DialogTitle>
-            <DialogDescription>Enter the details for the new area.</DialogDescription>
+            <DialogDescription>
+              Enter the details for the new area.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div>
@@ -939,7 +1243,10 @@ export default function LeadForm() {
             <div>
               <Label>City</Label>
               <SearchableSelect
-                options={cities.map(c => ({ value: c.city_id || "", label: c.city_name }))}
+                options={cities.map((c) => ({
+                  value: c.city_id || "",
+                  label: c.city_name,
+                }))}
                 value={newAreaCityId}
                 onChange={(v) => setNewAreaCityId(v)}
                 placeholder="Select city..."
@@ -947,11 +1254,26 @@ export default function LeadForm() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddAreaDialog(false)} disabled={addingNew}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-11"
+              onClick={() => setAddAreaDialog(false)}
+              disabled={addingNew}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl h-11 gap-2" onClick={handleAddArea} disabled={addingNew}>
-              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add Area"}
+            <Button
+              className="rounded-xl h-11 gap-2"
+              onClick={handleAddArea}
+              disabled={addingNew}
+            >
+              {addingNew ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                "Add Area"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -962,7 +1284,9 @@ export default function LeadForm() {
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add New Lead Source</DialogTitle>
-            <DialogDescription>Enter the name for the new lead source.</DialogDescription>
+            <DialogDescription>
+              Enter the name for the new lead source.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Label htmlFor="newSourceName">Source Name</Label>
@@ -970,18 +1294,38 @@ export default function LeadForm() {
               id="newSourceName"
               value={newSourceName}
               onChange={(e) => setNewSourceName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSource(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddSource();
+                }
+              }}
               className="h-11 rounded-xl mt-1.5"
               placeholder="e.g. LinkedIn, Referral, etc."
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddSourceDialog(false)} disabled={addingNew}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-11"
+              onClick={() => setAddSourceDialog(false)}
+              disabled={addingNew}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl h-11 gap-2" onClick={handleAddSource} disabled={addingNew}>
-              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add Source"}
+            <Button
+              className="rounded-xl h-11 gap-2"
+              onClick={handleAddSource}
+              disabled={addingNew}
+            >
+              {addingNew ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                "Add Source"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -992,7 +1336,9 @@ export default function LeadForm() {
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add New Lead Status</DialogTitle>
-            <DialogDescription>Enter the name for the new lead status.</DialogDescription>
+            <DialogDescription>
+              Enter the name for the new lead status.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Label htmlFor="newStatusName">Status Name</Label>
@@ -1000,29 +1346,54 @@ export default function LeadForm() {
               id="newStatusName"
               value={newStatusName}
               onChange={(e) => setNewStatusName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddStatus(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddStatus();
+                }
+              }}
               className="h-11 rounded-xl mt-1.5"
               placeholder="e.g. Hot Lead, Cold Lead, etc."
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddStatusDialog(false)} disabled={addingNew}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-11"
+              onClick={() => setAddStatusDialog(false)}
+              disabled={addingNew}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl h-11 gap-2" onClick={handleAddStatus} disabled={addingNew}>
-              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add Status"}
+            <Button
+              className="rounded-xl h-11 gap-2"
+              onClick={handleAddStatus}
+              disabled={addingNew}
+            >
+              {addingNew ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                "Add Status"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Add Project Type Dialog */}
-      <Dialog open={addProjectTypeDialog} onOpenChange={setAddProjectTypeDialog}>
+      <Dialog
+        open={addProjectTypeDialog}
+        onOpenChange={setAddProjectTypeDialog}
+      >
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add New Project Type</DialogTitle>
-            <DialogDescription>Enter the name for the new project type.</DialogDescription>
+            <DialogDescription>
+              Enter the name for the new project type.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Label htmlFor="newProjectTypeName">Project Type Name</Label>
@@ -1030,18 +1401,38 @@ export default function LeadForm() {
               id="newProjectTypeName"
               value={newProjectTypeName}
               onChange={(e) => setNewProjectTypeName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddProjectType(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddProjectType();
+                }
+              }}
               className="h-11 rounded-xl mt-1.5"
               placeholder="e.g. Residential, Commercial, etc."
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" className="rounded-xl h-11" onClick={() => setAddProjectTypeDialog(false)} disabled={addingNew}>
+            <Button
+              variant="outline"
+              className="rounded-xl h-11"
+              onClick={() => setAddProjectTypeDialog(false)}
+              disabled={addingNew}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl h-11 gap-2" onClick={handleAddProjectType} disabled={addingNew}>
-              {addingNew ? <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</> : "Add Project Type"}
+            <Button
+              className="rounded-xl h-11 gap-2"
+              onClick={handleAddProjectType}
+              disabled={addingNew}
+            >
+              {addingNew ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                "Add Project Type"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

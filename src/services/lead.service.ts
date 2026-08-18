@@ -21,7 +21,6 @@ export interface Lead {
   converted_client_id?: string;
   is_deleted?: string;
   c_date?: string;
-  // NEW FIELDS from PHP
   project_name?: string;
   house_number?: string;
   project_type_id?: string;
@@ -62,6 +61,9 @@ export interface LeadFilters {
   start_date?: string;
   end_date?: string;
   lead_id?: string;
+  source_id?: string;
+  status?: string;
+  assigned_to?: string;
 }
 
 export class LeadService extends BaseService {
@@ -91,6 +93,9 @@ export class LeadService extends BaseService {
         if (filters.employee_id) payload.filter_employee_id = filters.employee_id;
         if (filters.start_date) payload.start_date = filters.start_date;
         if (filters.end_date) payload.end_date = filters.end_date;
+        if (filters.source_id) payload.filter_source_id = filters.source_id;
+        if (filters.status) payload.filter_status = filters.status;
+        if (filters.assigned_to) payload.filter_assigned_to = filters.assigned_to;
       }
       const response = await this.post<ApiResponse<Lead[]>>(payload);
       

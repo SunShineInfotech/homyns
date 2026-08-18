@@ -24,6 +24,8 @@ export interface FollowupFilters {
   start_date?: string;
   end_date?: string;
   lead_id?: string;
+  source_id?: string;
+  status?: string;
 }
 
 export class FollowupService extends BaseService {
@@ -54,6 +56,8 @@ export class FollowupService extends BaseService {
         if (filters.start_date) payload.start_date = filters.start_date;
         if (filters.end_date) payload.end_date = filters.end_date;
         if (filters.lead_id) payload.filter_lead_id = filters.lead_id;
+        if (filters.source_id) payload.filter_source_id = filters.source_id;
+        if (filters.status) payload.filter_status = filters.status;
       }
       const response = await this.post<ApiResponse<Followup[]>>(payload);
       
