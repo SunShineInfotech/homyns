@@ -50,8 +50,7 @@ export default function Login() {
 
   // Get base path from environment
   const BASE_PATH =
-    import.meta.env.VITE_BASE_PATH ||
-    "/interior_designer/build_v1/";
+    import.meta.env.VITE_BASE_PATH || "/interior_designer/build_v1/";
 
   // Check if user is already logged in
   useEffect(() => {
@@ -74,14 +73,32 @@ export default function Login() {
   // Update CSS variables when company colors change
   useEffect(() => {
     if (companyColors.background_color) {
-      document.documentElement.style.setProperty('--primary', companyColors.background_color);
-      document.documentElement.style.setProperty('--sidebar-bg', companyColors.background_color);
-      document.documentElement.style.setProperty('--sidebar-accent', companyColors.background_color);
-      document.documentElement.style.setProperty('--sidebar-hover', adjustColor(companyColors.background_color, -20));
-      document.documentElement.style.setProperty('--primary-glow', adjustColor(companyColors.background_color, 20));
+      document.documentElement.style.setProperty(
+        "--primary",
+        companyColors.background_color,
+      );
+      document.documentElement.style.setProperty(
+        "--sidebar-bg",
+        companyColors.background_color,
+      );
+      document.documentElement.style.setProperty(
+        "--sidebar-accent",
+        companyColors.background_color,
+      );
+      document.documentElement.style.setProperty(
+        "--sidebar-hover",
+        adjustColor(companyColors.background_color, -20),
+      );
+      document.documentElement.style.setProperty(
+        "--primary-glow",
+        adjustColor(companyColors.background_color, 20),
+      );
     }
     if (companyColors.text_color) {
-      document.documentElement.style.setProperty('--sidebar-foreground', companyColors.text_color);
+      document.documentElement.style.setProperty(
+        "--sidebar-foreground",
+        companyColors.text_color,
+      );
     }
   }, [companyColors]);
 
@@ -95,7 +112,7 @@ export default function Login() {
     g = Math.max(0, Math.min(255, g + percent * 2.55));
     b = Math.max(0, Math.min(255, b + percent * 2.55));
 
-    return `#${[r, g, b].map(c => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+    return `#${[r, g, b].map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
   };
 
   // Verify Company Code
@@ -122,18 +139,21 @@ export default function Login() {
         setCompanyValid(true);
         setCompanyName(company?.company_name || "");
         setCompanyLogo(company?.logo || "");
-        
+
         const colors = {
           background_color: company?.background_color || "#ee3c31",
           text_color: company?.text_color || "#ffffff",
         };
         setCompanyColors(colors);
-        
-        localStorage.setItem("company_data", JSON.stringify({
-          ...company,
-          ...colors
-        }));
-        
+
+        localStorage.setItem(
+          "company_data",
+          JSON.stringify({
+            ...company,
+            ...colors,
+          }),
+        );
+
         setStep(2);
         toast({
           title: "Company Verified",
@@ -163,7 +183,7 @@ export default function Login() {
   // Password Login
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault(); // IMPORTANT: Prevent form submission reload
-    
+
     if (!loginData.login_code || !loginData.password) {
       toast({
         title: "Error",
@@ -185,21 +205,29 @@ export default function Login() {
       if (response.data.status === "success") {
         const userData = response.data.user;
         const companyData = response.data.company;
-        
+
         localStorage.setItem("auth_token", response.data.token);
-        localStorage.setItem("user_data", JSON.stringify({
-          ...userData,
-          access_pages: userData.access_pages || "",
-        }));
-        
-        const existingCompany = JSON.parse(localStorage.getItem("company_data") || "{}");
-        localStorage.setItem("company_data", JSON.stringify({
-          ...existingCompany,
-          ...companyData,
-        }));
-        
+        localStorage.setItem(
+          "user_data",
+          JSON.stringify({
+            ...userData,
+            access_pages: userData.access_pages || "",
+          }),
+        );
+
+        const existingCompany = JSON.parse(
+          localStorage.getItem("company_data") || "{}",
+        );
+        localStorage.setItem(
+          "company_data",
+          JSON.stringify({
+            ...existingCompany,
+            ...companyData,
+          }),
+        );
+
         toast({ title: "Welcome Back!", description: "Login successful" });
-        
+
         // Use window.location for full page reload with correct path
         window.location.href = `${window.location.origin}${BASE_PATH}welcome`;
       } else {
@@ -298,24 +326,32 @@ export default function Login() {
       if (response.data.status === "success") {
         const userData = response.data.user;
         const companyData = response.data.company;
-        
+
         localStorage.setItem("auth_token", response.data.token);
-        localStorage.setItem("user_data", JSON.stringify({
-          ...userData,
-          access_pages: userData.access_pages || "",
-        }));
-        
-        const existingCompany = JSON.parse(localStorage.getItem("company_data") || "{}");
-        localStorage.setItem("company_data", JSON.stringify({
-          ...existingCompany,
-          ...companyData,
-        }));
-        
+        localStorage.setItem(
+          "user_data",
+          JSON.stringify({
+            ...userData,
+            access_pages: userData.access_pages || "",
+          }),
+        );
+
+        const existingCompany = JSON.parse(
+          localStorage.getItem("company_data") || "{}",
+        );
+        localStorage.setItem(
+          "company_data",
+          JSON.stringify({
+            ...existingCompany,
+            ...companyData,
+          }),
+        );
+
         toast({
           title: "Welcome Back!",
           description: "Login successful",
         });
-        
+
         // Use window.location for full page reload with correct path
         window.location.href = `${window.location.origin}${BASE_PATH}welcome`;
       } else {
@@ -349,15 +385,15 @@ export default function Login() {
 
         <Card className="w-full max-w-md p-8 rounded-3xl shadow-2xl border border-white/50 bg-white/95 backdrop-blur-sm relative animate-fade-in">
           <div className="flex flex-col items-center mb-8">
-            <img 
-              src="https://sunshineproduct.in/interior_designer/uploadfiles/company/trackdesk.png" 
-              alt="Track Desk" 
+            <img
+              src="https://sunshineproduct.in/interior_designer/uploadfiles/company/trackdesk.png"
+              alt="Track Desk"
               className="h-14 object-contain"
               onError={(e) => {
-                e.currentTarget.style.display = 'none';
+                e.currentTarget.style.display = "none";
               }}
             />
-            <br/>
+            <br />
             <h1 className="text-2xl font-display font-bold text-slate-900">
               Welcome to Track Desk
             </h1>
@@ -368,7 +404,10 @@ export default function Login() {
 
           <form onSubmit={verifyCompanyCode} className="space-y-5">
             <div>
-              <Label htmlFor="companyCode" className="text-sm font-medium text-slate-700">
+              <Label
+                htmlFor="companyCode"
+                className="text-sm font-medium text-slate-700"
+              >
                 Company Code
               </Label>
               <div className="relative mt-1.5">
@@ -448,10 +487,10 @@ export default function Login() {
               }}
             />
           ) : (
-            <div 
+            <div
               className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-500/30 mb-4"
-              style={{ 
-                background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})` 
+              style={{
+                background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
               }}
             >
               <span className="text-white font-display font-bold text-3xl">
@@ -462,9 +501,7 @@ export default function Login() {
           <h1 className="text-2xl font-display font-bold text-slate-900">
             {companyName || "Track Desk"}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Sign in to your account
-          </p>
+          <p className="text-sm text-slate-500 mt-1">Sign in to your account</p>
           <button
             onClick={() => {
               setStep(1);
@@ -502,7 +539,10 @@ export default function Login() {
           <TabsContent value="password" className="space-y-4">
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
-                <Label htmlFor="loginCode" className="text-sm font-medium text-slate-700">
+                <Label
+                  htmlFor="loginCode"
+                  className="text-sm font-medium text-slate-700"
+                >
                   Login Code
                 </Label>
                 <div className="relative mt-1.5">
@@ -522,7 +562,10 @@ export default function Login() {
               </div>
 
               <div>
-                <Label htmlFor="password" className="text-sm font-medium text-slate-700">
+                <Label
+                  htmlFor="password"
+                  className="text-sm font-medium text-slate-700"
+                >
                   Password
                 </Label>
                 <div className="relative mt-1.5">
@@ -556,9 +599,9 @@ export default function Login() {
               <Button
                 type="submit"
                 className="w-full h-12 rounded-xl text-base font-semibold gap-2 shadow-lg hover:shadow-xl transition-all text-white"
-                style={{ 
+                style={{
                   background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
-                  boxShadow: `0 8px 24px -6px ${primaryColor}40`
+                  boxShadow: `0 8px 24px -6px ${primaryColor}40`,
                 }}
                 disabled={loading}
               >
@@ -583,13 +626,17 @@ export default function Login() {
                 <div className="flex items-start gap-2">
                   <MailCheck className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
                   <p className="text-xs text-blue-700">
-                    Enter your login code. We'll send the OTP to your registered email address.
+                    Enter your login code. We'll send the OTP to your registered
+                    email address.
                   </p>
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="otpLoginCode" className="text-sm font-medium text-slate-700">
+                <Label
+                  htmlFor="otpLoginCode"
+                  className="text-sm font-medium text-slate-700"
+                >
                   Login Code <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative mt-1.5">
@@ -614,9 +661,9 @@ export default function Login() {
                 <Button
                   onClick={sendOtp}
                   className="w-full h-12 rounded-xl text-base font-semibold gap-2 shadow-lg hover:shadow-xl transition-all text-white"
-                  style={{ 
+                  style={{
                     background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
-                    boxShadow: `0 8px 24px -6px ${primaryColor}40`
+                    boxShadow: `0 8px 24px -6px ${primaryColor}40`,
                   }}
                   disabled={loading || !loginData.login_code}
                 >
@@ -642,7 +689,8 @@ export default function Login() {
                           OTP Sent Successfully
                         </p>
                         <p className="text-xs text-indigo-600/80 mt-0.5">
-                          We've sent a verification code to your registered email
+                          We've sent a verification code to your registered
+                          email
                         </p>
                         {otpSentTo && (
                           <p className="text-xs text-indigo-700 font-medium mt-1">
@@ -654,7 +702,10 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <Label htmlFor="otpInput" className="text-sm font-medium text-slate-700">
+                    <Label
+                      htmlFor="otpInput"
+                      className="text-sm font-medium text-slate-700"
+                    >
                       Enter OTP
                     </Label>
                     <div className="relative mt-1.5">
@@ -680,9 +731,9 @@ export default function Login() {
                   <Button
                     onClick={verifyOtp}
                     className="w-full h-12 rounded-xl text-base font-semibold gap-2 shadow-lg hover:shadow-xl transition-all text-white"
-                    style={{ 
+                    style={{
                       background: `linear-gradient(135deg, ${primaryColor}, ${adjustColor(primaryColor, 20)})`,
-                      boxShadow: `0 8px 24px -6px ${primaryColor}40`
+                      boxShadow: `0 8px 24px -6px ${primaryColor}40`,
                     }}
                     disabled={loading || !otp || otp.length < 4}
                   >

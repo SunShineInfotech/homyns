@@ -398,7 +398,7 @@ export default function AllLeads() {
     <MainLayout title="All Leads" subtitle="Manage all leads">
       <div className="p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
         {/* Customer Search Bar - Prominent Direct Search */}
-        <div className="relative" ref={customerSearchRef}>
+        {/* <div className="relative" ref={customerSearchRef}>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -431,10 +431,10 @@ export default function AllLeads() {
                 Clear Search
               </Button>
             )}
-          </div>
+          </div> */}
 
-          {/* Customer Dropdown Results */}
-          {customerDropdownOpen && customerSearch.trim().length > 0 && (
+        {/* Customer Dropdown Results */}
+        {/* {customerDropdownOpen && customerSearch.trim().length > 0 && (
             <div className="absolute z-20 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-80 overflow-auto">
               {customerSearchResults.length === 0 ? (
                 <div className="p-4 text-sm text-muted-foreground text-center">
@@ -470,7 +470,7 @@ export default function AllLeads() {
               )}
             </div>
           )}
-        </div>
+        </div> */}
 
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
           <div className="relative flex-1">
