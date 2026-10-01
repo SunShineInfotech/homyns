@@ -29,12 +29,11 @@ import {
   Calculator,
   X,
   PlusCircle,
-  Eye,
-  EyeOff,
   Home,
   Check,
   AlertCircle,
   Sparkles,
+  GripVertical,
 } from "lucide-react";
 import { productService, Product } from "@/services/product.service";
 import {
@@ -53,6 +52,25 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+
+// ─── dnd-kit imports ──────────────────────────────────────────────────────
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const roomIcons: Record<string, React.ElementType> = {
   sofa: Sofa,
@@ -89,6 +107,675 @@ const EMPTY_QUICK_ADD = {
 const roundToTwo = (num: number): number => Math.round(num * 100) / 100;
 const roundToInteger = (num: number): number => Math.round(num);
 
+// ─── Sortable Room Card ──────────────────────────────────────────────────
+interface SortableRoomCardProps {
+  room: any;
+  isExpanded: boolean;
+  toggleRoom: (id: string) => void;
+  toggleRoomSelection: (id: string) => void;
+  updateRoomItem: (roomId: string, itemId: string, updates: any) => void;
+  removeProductFromRoom: (roomId: string, itemId: string) => void;
+  getProductDropdownOptions: (roomId: string) => { value: string; label: string }[];
+  handleProductDropdownChange: (roomId: string, value: string) => void;
+  selectedProductId: Record<string, string>;
+  isSelected: boolean;
+  roomTotal: number;
+  includedCount: number;
+  totalItems: number;
+  getRoomIcon: (room: any) => React.ElementType;
+  calculateTotalMeasure: (item: any) => number;
+  getQtyTypeLabel: (type: string) => string;
+  getUnitLabel: (unit: string) => string;
+}
+
+function SortableRoomCard({
+  room,
+  isExpanded,
+  toggleRoom,
+  toggleRoomSelection,
+  updateRoomItem,
+  removeProductFromRoom,
+  getProductDropdownOptions,
+  handleProductDropdownChange,
+  selectedProductId,
+  isSelected,
+  roomTotal,
+  includedCount,
+  totalItems,
+  getRoomIcon,
+  calculateTotalMeasure,
+  getQtyTypeLabel,
+  getUnitLabel,
+}: SortableRoomCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: room.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const Icon = getRoomIcon(room);
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <Card
+        className={cn(
+          "overflow-hidden border-border bg-card shadow-soft rounded-2xl transition-all duration-300",
+          isSelected ? "border-primary/40 shadow-md" : "border-muted-foreground/20 opacity-90",
+          isDragging && "shadow-elevated"
+        )}
+      >
+        {/* Room Header */}
+        <div
+          onClick={() => toggleRoom(room.id)}
+          className={cn(
+            "flex items-center justify-between p-3 md:p-5 cursor-pointer transition-colors select-none",
+            isExpanded && "bg-secondary/50 border-b border-border"
+          )}
+        >
+          <div className="flex items-center gap-2 md:gap-4 min-w-0">
+            {/* Drag Handle */}
+            <div
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-primary transition-colors p-1 -ml-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="w-4 h-4 md:w-5 md:h-5" />
+            </div>
+
+            <div
+              className={cn(
+                "w-9 h-9 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0",
+                isExpanded ? "bg-primary/10" : "bg-secondary",
+                !isSelected && "opacity-60"
+              )}
+            >
+              <Icon
+                className={cn(
+                  "w-4 h-4 md:w-6 md:h-6",
+                  isExpanded ? "text-primary" : "text-muted-foreground"
+                )}
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold text-foreground text-sm md:text-base truncate">
+                  {room.name}
+                </h3>
+                {!isSelected && (
+                  <Badge variant="secondary" className="text-[10px] shrink-0">
+                    Not Added
+                  </Badge>
+                )}
+                {isSelected && (
+                  <Badge variant="default" className="text-[10px] shrink-0 bg-primary">
+                    Added
+                  </Badge>
+                )}
+              </div>
+              <p className="text-[11px] md:text-sm text-muted-foreground">
+                {includedCount}/{totalItems} items selected • ₹
+                {roomTotal.toLocaleString()}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
+            <div className="text-right">
+              <p className="text-[10px] text-muted-foreground">Total</p>
+              <p className="text-sm md:text-lg font-semibold text-foreground">
+                ₹{roomTotal.toLocaleString()}
+              </p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 md:w-5 md:h-5 text-muted-foreground transition-transform",
+                isExpanded && "rotate-180"
+              )}
+            />
+          </div>
+        </div>
+
+        {/* Room Content */}
+        {isExpanded && (
+          <div className="p-3 md:p-5 space-y-3 md:space-y-4 animate-fade-in">
+            {/* Room Actions - Select/Deselect */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-secondary/30 rounded-xl border border-border">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant={isSelected ? "default" : "outline"}
+                  size="sm"
+                  className="gap-2 rounded-lg text-xs md:text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleRoomSelection(room.id);
+                  }}
+                >
+                  {isSelected ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      Selected
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Room
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {isSelected ? (
+                  <span>All products are checked</span>
+                ) : (
+                  <span>Products are unchecked</span>
+                )}
+              </div>
+            </div>
+
+            {/* Products Section */}
+            <>
+              {/* Add Product */}
+              <div className="p-3 md:p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl border border-primary/20">
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Product to {room.name}
+                </p>
+                <SearchableSelect
+                  options={getProductDropdownOptions(room.id)}
+                  value={selectedProductId[room.id] || ""}
+                  onChange={(v) => handleProductDropdownChange(room.id, v)}
+                  placeholder="Search existing product or add a new one..."
+                />
+              </div>
+
+              {/* Items */}
+              {!room.items || room.items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+                    <Package className="w-7 h-7 text-muted-foreground/40" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    No items in this room
+                  </p>
+                  <p className="text-xs text-muted-foreground/60">
+                    Search and select a product above, or add a new one
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {room.items.map((item: any, index: number) => {
+                    const isDimensionBased = item.qty_type !== "Fixed";
+                    const totalMeasure = calculateTotalMeasure(item);
+                    const unit = item.measurement_unit || "inches";
+                    const unitLabel = getUnitLabel(unit);
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "rounded-xl border transition-all duration-200",
+                          item.included
+                            ? "border-border bg-card"
+                            : "border-dashed border-muted-foreground/30 bg-muted/10 opacity-70"
+                        )}
+                      >
+                        {/* Item Header */}
+                        <div
+                          className={cn(
+                            "p-3 flex items-start gap-2",
+                            item.included && "border-b border-border"
+                          )}
+                        >
+                          <Checkbox
+                            checked={item.included}
+                            onCheckedChange={(c) => {
+                              if (!isSelected) {
+                                toggleRoomSelection(room.id);
+                              }
+                              updateRoomItem(room.id, item.id, {
+                                included: c as boolean,
+                              });
+                            }}
+                            className="mt-0.5 shrink-0"
+                            disabled={!isSelected}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-1">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-semibold text-foreground text-sm truncate">
+                                    {item.name}
+                                  </p>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] px-1.5 py-0 shrink-0"
+                                  >
+                                    #{index + 1}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[9px] px-1.5 py-0"
+                                  >
+                                    {getQtyTypeLabel(item.qty_type)}
+                                  </Badge>
+                                  {item.included && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Qty: {item.quantity}
+                                    </span>
+                                  )}
+                                  {isDimensionBased && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Unit: {unitLabel}
+                                    </span>
+                                  )}
+                                  {!isSelected && (
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+                                      Locked
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              {item.included && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="text-sm font-bold text-primary">
+                                    ₹
+                                    {roundToInteger(
+                                      item.total_price || 0
+                                    ).toLocaleString()}
+                                  </span>
+                                  {isSelected && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                      onClick={() =>
+                                        removeProductFromRoom(room.id, item.id)
+                                      }
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Item Details - Only show if included */}
+                        {item.included && isSelected && (
+                          <div className="p-3 space-y-3">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                              {/* Left: Config */}
+                              <div className="space-y-3">
+                                {isDimensionBased && (
+                                  <div className="bg-muted/20 rounded-lg p-3">
+                                    <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
+                                      <Ruler className="w-3 h-3" />
+                                      Measurement Unit
+                                    </Label>
+                                    <RadioGroup
+                                      value={item.measurement_unit || "inches"}
+                                      onValueChange={(v) =>
+                                        updateRoomItem(room.id, item.id, {
+                                          measurement_unit: v,
+                                        })
+                                      }
+                                      className="flex gap-4"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <RadioGroupItem
+                                          value="feet"
+                                          id={`feet-${item.id}`}
+                                        />
+                                        <Label
+                                          htmlFor={`feet-${item.id}`}
+                                          className="text-xs cursor-pointer"
+                                        >
+                                          Feet
+                                        </Label>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <RadioGroupItem
+                                          value="inches"
+                                          id={`inches-${item.id}`}
+                                        />
+                                        <Label
+                                          htmlFor={`inches-${item.id}`}
+                                          className="text-xs cursor-pointer"
+                                        >
+                                          Inches
+                                        </Label>
+                                      </div>
+                                    </RadioGroup>
+                                  </div>
+                                )}
+
+                                {isDimensionBased && (
+                                  <div className="bg-muted/20 rounded-lg p-3">
+                                    <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
+                                      <Calculator className="w-3 h-3" />
+                                      Dimensions ({unitLabel})
+                                    </Label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div>
+                                        <Label className="text-[9px] text-muted-foreground block mb-0.5">
+                                          Height
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          value={item.height || 0}
+                                          onChange={(e) =>
+                                            updateRoomItem(room.id, item.id, {
+                                              height: Math.max(
+                                                0,
+                                                Number(e.target.value) || 0
+                                              ),
+                                            })
+                                          }
+                                          className="h-8 rounded-lg text-xs px-2"
+                                          min="0"
+                                          step="0.01"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[9px] text-muted-foreground block mb-0.5">
+                                          Width
+                                        </Label>
+                                        <Input
+                                          type="number"
+                                          value={item.width || 0}
+                                          onChange={(e) =>
+                                            updateRoomItem(room.id, item.id, {
+                                              width: Math.max(
+                                                0,
+                                                Number(e.target.value) || 0
+                                              ),
+                                            })
+                                          }
+                                          className="h-8 rounded-lg text-xs px-2"
+                                          min="0"
+                                          step="0.01"
+                                        />
+                                      </div>
+                                      {item.qty_type === "ByHWD" && (
+                                        <div>
+                                          <Label className="text-[9px] text-muted-foreground block mb-0.5">
+                                            Depth
+                                          </Label>
+                                          <Input
+                                            type="number"
+                                            value={item.depth || 0}
+                                            onChange={(e) =>
+                                              updateRoomItem(
+                                                room.id,
+                                                item.id,
+                                                {
+                                                  depth: Math.max(
+                                                    0,
+                                                    Number(e.target.value) || 0
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            className="h-8 rounded-lg text-xs px-2"
+                                            min="0"
+                                            step="0.01"
+                                          />
+                                        </div>
+                                      )}
+                                      {item.qty_type === "ByHWL" && (
+                                        <div>
+                                          <Label className="text-[9px] text-muted-foreground block mb-0.5">
+                                            Length
+                                          </Label>
+                                          <Input
+                                            type="number"
+                                            value={item.length || 0}
+                                            onChange={(e) =>
+                                              updateRoomItem(
+                                                room.id,
+                                                item.id,
+                                                {
+                                                  length: Math.max(
+                                                    0,
+                                                    Number(e.target.value) || 0
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            className="h-8 rounded-lg text-xs px-2"
+                                            min="0"
+                                            step="0.01"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="bg-muted/20 rounded-lg p-3">
+                                  <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
+                                    <Package className="w-3 h-3" />
+                                    Quantity
+                                  </Label>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8 rounded-lg shrink-0"
+                                      disabled={item.quantity <= 1}
+                                      onClick={() =>
+                                        updateRoomItem(room.id, item.id, {
+                                          quantity: Math.max(
+                                            1,
+                                            item.quantity - 1
+                                          ),
+                                        })
+                                      }
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </Button>
+                                    <span className="flex-1 text-center font-semibold text-sm">
+                                      {item.quantity}
+                                    </span>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8 rounded-lg shrink-0"
+                                      onClick={() =>
+                                        updateRoomItem(room.id, item.id, {
+                                          quantity: item.quantity + 1,
+                                        })
+                                      }
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right: Price */}
+                              <div className="space-y-3">
+                                <div className="bg-muted/20 rounded-lg p-3">
+                                  <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
+                                    <span className="font-semibold">₹</span>
+                                    Unit Price
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    value={item.unit_price || 0}
+                                    onChange={(e) =>
+                                      updateRoomItem(room.id, item.id, {
+                                        unit_price: Math.max(
+                                          0,
+                                          Number(e.target.value) || 0
+                                        ),
+                                      })
+                                    }
+                                    className="h-8 rounded-lg text-sm"
+                                    min="0"
+                                    step="0.01"
+                                  />
+                                </div>
+
+                                <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-3 border border-primary/20">
+                                  <div className="flex items-center gap-1 mb-2">
+                                    <Calculator className="w-3 h-3 text-primary" />
+                                    <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">
+                                      Price Breakdown
+                                    </span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {isDimensionBased ? (
+                                      <>
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-muted-foreground">
+                                            Total Measure
+                                          </span>
+                                          <span className="font-mono font-medium">
+                                            {roundToTwo(totalMeasure)} sq.ft
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-muted-foreground">
+                                            Unit Price
+                                          </span>
+                                          <span className="font-mono font-medium">
+                                            ₹{roundToTwo(item.unit_price || 0)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-muted-foreground">
+                                            Formula
+                                          </span>
+                                          <span className="font-mono font-medium text-[10px]">
+                                            {item.qty_type === "ByHW" && "W × H × Qty"}
+                                            {item.qty_type === "ByHWD" && "W × H × D × Qty"}
+                                            {item.qty_type === "ByHWL" && "W × H × L × Qty"}
+                                          </span>
+                                        </div>
+                                        <div className="border-t border-primary/20 pt-1.5 mt-1">
+                                          <div className="flex justify-between text-sm font-bold text-primary">
+                                            <span>Final Amount</span>
+                                            <span>
+                                              ₹{roundToInteger(
+                                                item.total_price || 0
+                                              ).toLocaleString()}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-muted-foreground">
+                                            Unit Price
+                                          </span>
+                                          <span className="font-mono font-medium">
+                                            ₹{roundToTwo(item.unit_price || 0)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-muted-foreground">
+                                            Quantity
+                                          </span>
+                                          <span className="font-mono font-medium">
+                                            × {item.quantity}
+                                          </span>
+                                        </div>
+                                        <div className="border-t border-primary/20 pt-1.5 mt-1">
+                                          <div className="flex justify-between text-sm font-bold text-primary">
+                                            <span>Total</span>
+                                            <span>
+                                              ₹{roundToInteger(
+                                                item.total_price || 0
+                                              ).toLocaleString()}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {item.raw_materials &&
+                              item.raw_materials.length > 0 && (
+                                <div className="bg-secondary/20 rounded-lg p-3 space-y-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                      Raw Materials
+                                    </p>
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[9px] px-1.5 py-0"
+                                    >
+                                      {item.raw_materials.length}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.raw_materials.map(
+                                      (rm: any, idx: number) => (
+                                        <Badge
+                                          key={idx}
+                                          variant="secondary"
+                                          className="text-[10px] px-2 py-0.5 rounded-md"
+                                        >
+                                          {rm.rm_name || rm.name}
+                                          {rm.rm_qty &&
+                                            ` (${rm.rm_qty} ${rm.unit_name || ""})`}
+                                        </Badge>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1">
+                                <Info className="w-3 h-3" />
+                                Remark
+                              </Label>
+                              <Textarea
+                                value={item.remark || ""}
+                                onChange={(e) =>
+                                  updateRoomItem(room.id, item.id, {
+                                    remark: e.target.value,
+                                  })
+                                }
+                                placeholder="Any specific requirement..."
+                                rows={2}
+                                className="rounded-lg text-sm resize-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────
 export default function StepItems() {
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<any[]>([]);
@@ -110,6 +797,14 @@ export default function StepItems() {
   const [quickAddData, setQuickAddData] = useState<any>({ ...EMPTY_QUICK_ADD });
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [quickAddError, setQuickAddError] = useState("");
+
+  // ─── DND Sensors ────────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const getCompanyId = (): string => {
     try {
@@ -179,8 +874,8 @@ export default function StepItems() {
       // If no rooms were selected in StepRooms, use the first room as default
       const roomIds = selectedRoomIdsFromSave.length > 0
         ? selectedRoomIdsFromSave
-        : allSavedRooms.length > 0 
-          ? [allSavedRooms[0].id] 
+        : allSavedRooms.length > 0
+          ? [allSavedRooms[0].id]
           : [];
 
       setSelectedRoomIds(roomIds);
@@ -189,11 +884,11 @@ export default function StepItems() {
         // Process ALL rooms - show all rooms from the package
         const processedRooms = allSavedRooms.map((room: any) => {
           const isSelected = roomIds.includes(room.id);
-          
+
           // Update items with fresh product data
           const updatedItems = room.items.map((item: any) => {
             const freshProduct = formattedProducts.find(
-              (p: any) => p.product_id === item.product_id,
+              (p: any) => p.product_id === item.product_id
             );
 
             const merged = {
@@ -208,7 +903,6 @@ export default function StepItems() {
               raw_materials: freshProduct?.product_details || item.raw_materials || [],
               measurement_unit: item.measurement_unit || "inches",
               quantity: item.quantity || item.default_qty || 1,
-              // IMPORTANT: Only checked if room is selected
               included: isSelected ? true : false,
             };
             merged.total_price = calculateItemTotalStatic(merged);
@@ -228,7 +922,7 @@ export default function StepItems() {
         });
 
         setRooms(processedRooms);
-        
+
         // Expand the first selected room, or first room if none selected
         const firstSelected = processedRooms.find((r: any) => r.selected);
         setExpandedRooms(saved.expandedRooms || (firstSelected ? [firstSelected.id] : processedRooms.length > 0 ? [processedRooms[0].id] : []));
@@ -271,23 +965,23 @@ export default function StepItems() {
     setExpandedRooms((prev) =>
       prev.includes(roomId)
         ? prev.filter((id) => id !== roomId)
-        : [...prev, roomId],
+        : [...prev, roomId]
     );
   };
 
   // Toggle room selection (add/remove room from quotation)
   const toggleRoomSelection = (roomId: string) => {
-    setRooms(prev => 
+    setRooms(prev =>
       prev.map(room => {
         if (room.id === roomId) {
           const newSelected = !room.selected;
-          
+
           // Update all items in the room - if selected, check all products; if deselected, uncheck all
           const updatedItems = room.items.map((item: any) => ({
             ...item,
             included: newSelected ? true : false,
           }));
-          
+
           const roomTotal = updatedItems
             .filter((i: any) => i.included)
             .reduce((sum: number, i: any) => sum + (i.total_price || 0), 0);
@@ -378,7 +1072,7 @@ export default function StepItems() {
           items: updatedItems,
           room_total: roundToTwo(roomTotal),
         };
-      }),
+      })
     );
   };
 
@@ -425,7 +1119,7 @@ export default function StepItems() {
           items: updatedItems,
           room_total: roundToTwo(roomTotal),
         };
-      }),
+      })
     );
 
     setSelectedRoomIds((prev) => (prev.includes(roomId) ? prev : [...prev, roomId]));
@@ -445,7 +1139,7 @@ export default function StepItems() {
           items: updatedItems,
           room_total: roundToTwo(roomTotal),
         };
-      }),
+      })
     );
   };
 
@@ -453,7 +1147,7 @@ export default function StepItems() {
     roundToTwo(
       room.items
         ?.filter((i: any) => i.included)
-        .reduce((sum: number, i: any) => sum + (i.total_price || 0), 0) || 0,
+        .reduce((sum: number, i: any) => sum + (i.total_price || 0), 0) || 0
     );
 
   const getAvailableProducts = (roomId: string) => {
@@ -575,15 +1269,15 @@ export default function StepItems() {
           const returnedId = (res as any)?.product_id || (res as any)?.data?.product_id;
           if (returnedId) {
             newProduct = formatted.find(
-              (p) => String(p.product_id) === String(returnedId),
+              (p) => String(p.product_id) === String(returnedId)
             );
           }
           if (!newProduct) {
             const matches = formatted.filter(
-              (p) => p.product_name === quickAddData.product_name.trim(),
+              (p) => p.product_name === quickAddData.product_name.trim()
             );
             newProduct = matches.sort(
-              (a, b) => Number(b.product_id) - Number(a.product_id),
+              (a, b) => Number(b.product_id) - Number(a.product_id)
             )[0];
           }
         }
@@ -603,7 +1297,7 @@ export default function StepItems() {
       }
     } catch (e: any) {
       setQuickAddError(
-        e?.response?.data?.message || "Something went wrong while creating the product",
+        e?.response?.data?.message || "Something went wrong while creating the product"
       );
     } finally {
       setQuickAddSaving(false);
@@ -640,7 +1334,7 @@ export default function StepItems() {
   };
 
   const handleAddRoom = (roomId: string) => {
-    setRooms(prev => 
+    setRooms(prev =>
       prev.map(room => {
         if (room.id === roomId) {
           // When adding a room, select it and check all products
@@ -648,7 +1342,7 @@ export default function StepItems() {
             ...item,
             included: true,
           }));
-          
+
           const roomTotal = updatedItems
             .filter((i: any) => i.included)
             .reduce((sum: number, i: any) => sum + (i.total_price || 0), 0);
@@ -666,7 +1360,7 @@ export default function StepItems() {
 
     setSelectedRoomIds(prev => [...prev, roomId]);
     setAddRoomDialogOpen(false);
-    
+
     toast({
       title: "Room Added",
       description: "Room has been added to your quotation with all products selected.",
@@ -677,6 +1371,41 @@ export default function StepItems() {
     const Icon = roomIcons[room.icon as keyof typeof roomIcons] || Sofa;
     return Icon;
   };
+
+  // ─── Drag End Handler (only reorders selected rooms) ──────────────────
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setRooms((prev) => {
+      // Get the selected rooms in their current order
+      const selectedRooms = prev.filter(r => r.selected);
+      const selectedIds = selectedRooms.map(r => r.id);
+      const oldIndex = selectedIds.indexOf(active.id);
+      const newIndex = selectedIds.indexOf(over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      // Reorder the selected rooms
+      const reorderedSelected = arrayMove(selectedRooms, oldIndex, newIndex);
+
+      // Build the new full rooms array preserving unselected rooms in place
+      const roomMap = new Map(prev.map(r => [r.id, r]));
+      const newRooms: any[] = [];
+      let selectedIdx = 0;
+      for (const room of prev) {
+        if (room.selected) {
+          newRooms.push(reorderedSelected[selectedIdx]);
+          selectedIdx++;
+        } else {
+          newRooms.push(room);
+        }
+      }
+      return newRooms;
+    });
+  };
+
+  // Filter to only selected rooms for display
+  const selectedRooms = rooms.filter(room => room.selected);
 
   if (loading) {
     return (
@@ -708,7 +1437,7 @@ export default function StepItems() {
   }
 
   const availableRoomsToAdd = getAvailableRoomsToAdd();
-  
+
   // Calculate grand total - only from selected rooms
   const grandTotal = rooms.reduce((acc, room) => {
     if (room.selected) {
@@ -733,617 +1462,49 @@ export default function StepItems() {
         </div>
       )}
 
-      {rooms.map((room) => {
-        const Icon = getRoomIcon(room);
-        const isExpanded = expandedRooms.includes(room.id);
-        const roomTotal = getRoomTotal(room);
-        const includedCount =
-          room.items?.filter((i: any) => i.included).length || 0;
-        const totalItems = room.items?.length || 0;
-        const isSelected = room.selected ?? false;
+      {/* DnD Context */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={selectedRooms.map((room) => room.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {selectedRooms.map((room) => {
+            const isExpanded = expandedRooms.includes(room.id);
+            const roomTotal = getRoomTotal(room);
+            const includedCount =
+              room.items?.filter((i: any) => i.included).length || 0;
+            const totalItems = room.items?.length || 0;
+            const isSelected = room.selected ?? false;
 
-        return (
-          <Card
-            key={room.id}
-            className={cn(
-              "overflow-hidden border-border bg-card shadow-soft rounded-2xl transition-all duration-300",
-              isSelected ? "border-primary/40 shadow-md" : "border-muted-foreground/20 opacity-90"
-            )}
-          >
-            {/* Room Header */}
-            <div
-              onClick={() => toggleRoom(room.id)}
-              className={cn(
-                "flex items-center justify-between p-3 md:p-5 cursor-pointer transition-colors select-none",
-                isExpanded && "bg-secondary/50 border-b border-border",
-              )}
-            >
-              <div className="flex items-center gap-2 md:gap-4 min-w-0">
-                <div
-                  className={cn(
-                    "w-9 h-9 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0",
-                    isExpanded ? "bg-primary/10" : "bg-secondary",
-                    !isSelected && "opacity-60"
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      "w-4 h-4 md:w-6 md:h-6",
-                      isExpanded ? "text-primary" : "text-muted-foreground",
-                    )}
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-semibold text-foreground text-sm md:text-base truncate">
-                      {room.name}
-                    </h3>
-                    {!isSelected && (
-                      <Badge variant="secondary" className="text-[10px] shrink-0">
-                        Not Added
-                      </Badge>
-                    )}
-                    {isSelected && (
-                      <Badge variant="default" className="text-[10px] shrink-0 bg-primary">
-                        Added
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-[11px] md:text-sm text-muted-foreground">
-                    {includedCount}/{totalItems} items selected • ₹
-                    {roomTotal.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 md:gap-4 shrink-0">
-                <div className="text-right">
-                  <p className="text-[10px] text-muted-foreground">Total</p>
-                  <p className="text-sm md:text-lg font-semibold text-foreground">
-                    ₹{roomTotal.toLocaleString()}
-                  </p>
-                </div>
-                <ChevronDown
-                  className={cn(
-                    "w-4 h-4 md:w-5 md:h-5 text-muted-foreground transition-transform",
-                    isExpanded && "rotate-180",
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Room Content */}
-            {isExpanded && (
-              <div className="p-3 md:p-5 space-y-3 md:space-y-4 animate-fade-in">
-                {/* Room Actions - Select/Deselect */}
-                <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-secondary/30 rounded-xl border border-border">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant={isSelected ? "default" : "outline"}
-                      size="sm"
-                      className="gap-2 rounded-lg text-xs md:text-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleRoomSelection(room.id);
-                      }}
-                    >
-                      {isSelected ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          Selected
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          Add Room
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {isSelected ? (
-                      <span>All products are checked</span>
-                    ) : (
-                      <span>Products are unchecked</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Products Section - Always show products but with checkboxes reflecting selection state */}
-                <>
-                  {/* Add Product - Always available so a room can be created via product add too */}
-                  <div className="p-3 md:p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl border border-primary/20">
-                    <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Product to {room.name}
-                    </p>
-                    <SearchableSelect
-                      options={getProductDropdownOptions(room.id)}
-                      value={selectedProductId[room.id] || ""}
-                      onChange={(v) => handleProductDropdownChange(room.id, v)}
-                      placeholder="Search existing product or add a new one..."
-                    />
-                  </div>
-
-                  {/* Items */}
-                  {!room.items || room.items.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center mb-3">
-                        <Package className="w-7 h-7 text-muted-foreground/40" />
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        No items in this room
-                      </p>
-                      <p className="text-xs text-muted-foreground/60">
-                        Search and select a product above, or add a new one
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {room.items.map((item: any, index: number) => {
-                        const isDimensionBased = item.qty_type !== "Fixed";
-                        const totalMeasure = calculateTotalMeasure(item);
-                        const unit = item.measurement_unit || "inches";
-                        const unitLabel = getUnitLabel(unit);
-
-                        return (
-                          <div
-                            key={item.id}
-                            className={cn(
-                              "rounded-xl border transition-all duration-200",
-                              item.included
-                                ? "border-border bg-card"
-                                : "border-dashed border-muted-foreground/30 bg-muted/10 opacity-70",
-                            )}
-                          >
-                            {/* Item Header */}
-                            <div
-                              className={cn(
-                                "p-3 flex items-start gap-2",
-                                item.included && "border-b border-border",
-                              )}
-                            >
-                              <Checkbox
-                                checked={item.included}
-                                onCheckedChange={(c) => {
-                                  if (!isSelected) {
-                                    // If room is not selected, selecting a product should select the room
-                                    toggleRoomSelection(room.id);
-                                  }
-                                  updateRoomItem(room.id, item.id, {
-                                    included: c as boolean,
-                                  });
-                                }}
-                                className="mt-0.5 shrink-0"
-                                disabled={!isSelected}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-1">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="font-semibold text-foreground text-sm truncate">
-                                        {item.name}
-                                      </p>
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[9px] px-1.5 py-0 shrink-0"
-                                      >
-                                        #{index + 1}
-                                      </Badge>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[9px] px-1.5 py-0"
-                                      >
-                                        {getQtyTypeLabel(item.qty_type)}
-                                      </Badge>
-                                      {item.included && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          Qty: {item.quantity}
-                                        </span>
-                                      )}
-                                      {isDimensionBased && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          Unit: {unitLabel}
-                                        </span>
-                                      )}
-                                      {!isSelected && (
-                                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
-                                          Locked
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {item.included && (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <span className="text-sm font-bold text-primary">
-                                        ₹
-                                        {roundToInteger(
-                                          item.total_price || 0,
-                                        ).toLocaleString()}
-                                      </span>
-                                      {isSelected && (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-6 w-6 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                          onClick={() =>
-                                            removeProductFromRoom(room.id, item.id)
-                                          }
-                                        >
-                                          <X className="h-3.5 w-3.5" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Item Details - Only show if included */}
-                            {item.included && isSelected && (
-                              <div className="p-3 space-y-3">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                  {/* Left: Config */}
-                                  <div className="space-y-3">
-                                    {isDimensionBased && (
-                                      <div className="bg-muted/20 rounded-lg p-3">
-                                        <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
-                                          <Ruler className="w-3 h-3" />
-                                          Measurement Unit
-                                        </Label>
-                                        <RadioGroup
-                                          value={item.measurement_unit || "inches"}
-                                          onValueChange={(v) =>
-                                            updateRoomItem(room.id, item.id, {
-                                              measurement_unit: v,
-                                            })
-                                          }
-                                          className="flex gap-4"
-                                        >
-                                          <div className="flex items-center gap-1.5">
-                                            <RadioGroupItem
-                                              value="feet"
-                                              id={`feet-${item.id}`}
-                                            />
-                                            <Label
-                                              htmlFor={`feet-${item.id}`}
-                                              className="text-xs cursor-pointer"
-                                            >
-                                              Feet
-                                            </Label>
-                                          </div>
-                                          <div className="flex items-center gap-1.5">
-                                            <RadioGroupItem
-                                              value="inches"
-                                              id={`inches-${item.id}`}
-                                            />
-                                            <Label
-                                              htmlFor={`inches-${item.id}`}
-                                              className="text-xs cursor-pointer"
-                                            >
-                                              Inches
-                                            </Label>
-                                          </div>
-                                        </RadioGroup>
-                                      </div>
-                                    )}
-
-                                    {isDimensionBased && (
-                                      <div className="bg-muted/20 rounded-lg p-3">
-                                        <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
-                                          <Calculator className="w-3 h-3" />
-                                          Dimensions ({unitLabel})
-                                        </Label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                          <div>
-                                            <Label className="text-[9px] text-muted-foreground block mb-0.5">
-                                              Height
-                                            </Label>
-                                            <Input
-                                              type="number"
-                                              value={item.height || 0}
-                                              onChange={(e) =>
-                                                updateRoomItem(room.id, item.id, {
-                                                  height: Math.max(
-                                                    0,
-                                                    Number(e.target.value) || 0,
-                                                  ),
-                                                })
-                                              }
-                                              className="h-8 rounded-lg text-xs px-2"
-                                              min="0"
-                                              step="0.01"
-                                            />
-                                          </div>
-                                          <div>
-                                            <Label className="text-[9px] text-muted-foreground block mb-0.5">
-                                              Width
-                                            </Label>
-                                            <Input
-                                              type="number"
-                                              value={item.width || 0}
-                                              onChange={(e) =>
-                                                updateRoomItem(room.id, item.id, {
-                                                  width: Math.max(
-                                                    0,
-                                                    Number(e.target.value) || 0,
-                                                  ),
-                                                })
-                                              }
-                                              className="h-8 rounded-lg text-xs px-2"
-                                              min="0"
-                                              step="0.01"
-                                            />
-                                          </div>
-                                          {item.qty_type === "ByHWD" && (
-                                            <div>
-                                              <Label className="text-[9px] text-muted-foreground block mb-0.5">
-                                                Depth
-                                              </Label>
-                                              <Input
-                                                type="number"
-                                                value={item.depth || 0}
-                                                onChange={(e) =>
-                                                  updateRoomItem(
-                                                    room.id,
-                                                    item.id,
-                                                    {
-                                                      depth: Math.max(
-                                                        0,
-                                                        Number(e.target.value) ||
-                                                        0,
-                                                      ),
-                                                    }
-                                                  )
-                                                }
-                                                className="h-8 rounded-lg text-xs px-2"
-                                                min="0"
-                                                step="0.01"
-                                              />
-                                            </div>
-                                          )}
-                                          {item.qty_type === "ByHWL" && (
-                                            <div>
-                                              <Label className="text-[9px] text-muted-foreground block mb-0.5">
-                                                Length
-                                              </Label>
-                                              <Input
-                                                type="number"
-                                                value={item.length || 0}
-                                                onChange={(e) =>
-                                                  updateRoomItem(
-                                                    room.id,
-                                                    item.id,
-                                                    {
-                                                      length: Math.max(
-                                                        0,
-                                                        Number(e.target.value) ||
-                                                        0,
-                                                      ),
-                                                    }
-                                                  )
-                                                }
-                                                className="h-8 rounded-lg text-xs px-2"
-                                                min="0"
-                                                step="0.01"
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    <div className="bg-muted/20 rounded-lg p-3">
-                                      <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
-                                        <Package className="w-3 h-3" />
-                                        Quantity
-                                      </Label>
-                                      <div className="flex items-center gap-2">
-                                        <Button
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8 rounded-lg shrink-0"
-                                          disabled={item.quantity <= 1}
-                                          onClick={() =>
-                                            updateRoomItem(room.id, item.id, {
-                                              quantity: Math.max(
-                                                1,
-                                                item.quantity - 1,
-                                              ),
-                                            })
-                                          }
-                                        >
-                                          <Minus className="w-3 h-3" />
-                                        </Button>
-                                        <span className="flex-1 text-center font-semibold text-sm">
-                                          {item.quantity}
-                                        </span>
-                                        <Button
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8 rounded-lg shrink-0"
-                                          onClick={() =>
-                                            updateRoomItem(room.id, item.id, {
-                                              quantity: item.quantity + 1,
-                                            })
-                                          }
-                                        >
-                                          <Plus className="w-3 h-3" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Right: Price */}
-                                  <div className="space-y-3">
-                                    <div className="bg-muted/20 rounded-lg p-3">
-                                      <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
-                                        <span className="font-semibold">₹</span>
-                                        Unit Price
-                                      </Label>
-                                      <Input
-                                        type="number"
-                                        value={item.unit_price || 0}
-                                        onChange={(e) =>
-                                          updateRoomItem(room.id, item.id, {
-                                            unit_price: Math.max(
-                                              0,
-                                              Number(e.target.value) || 0,
-                                            ),
-                                          })
-                                        }
-                                        className="h-8 rounded-lg text-sm"
-                                        min="0"
-                                        step="0.01"
-                                      />
-                                    </div>
-
-                                    <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg p-3 border border-primary/20">
-                                      <div className="flex items-center gap-1 mb-2">
-                                        <Calculator className="w-3 h-3 text-primary" />
-                                        <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">
-                                          Price Breakdown
-                                        </span>
-                                      </div>
-                                      <div className="space-y-1">
-                                        {isDimensionBased ? (
-                                          <>
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-muted-foreground">
-                                                Total Measure
-                                              </span>
-                                              <span className="font-mono font-medium">
-                                                {roundToTwo(totalMeasure)} sq.ft
-                                              </span>
-                                            </div>
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-muted-foreground">
-                                                Unit Price
-                                              </span>
-                                              <span className="font-mono font-medium">
-                                                ₹{roundToTwo(item.unit_price || 0)}
-                                              </span>
-                                            </div>
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-muted-foreground">
-                                                Formula
-                                              </span>
-                                              <span className="font-mono font-medium text-[10px]">
-                                                {item.qty_type === "ByHW" && "W × H × Qty"}
-                                                {item.qty_type === "ByHWD" && "W × H × D × Qty"}
-                                                {item.qty_type === "ByHWL" && "W × H × L × Qty"}
-                                              </span>
-                                            </div>
-                                            <div className="border-t border-primary/20 pt-1.5 mt-1">
-                                              <div className="flex justify-between text-sm font-bold text-primary">
-                                                <span>Final Amount</span>
-                                                <span>
-                                                  ₹{roundToInteger(
-                                                    item.total_price || 0,
-                                                  ).toLocaleString()}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-muted-foreground">
-                                                Unit Price
-                                              </span>
-                                              <span className="font-mono font-medium">
-                                                ₹{roundToTwo(item.unit_price || 0)}
-                                              </span>
-                                            </div>
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-muted-foreground">
-                                                Quantity
-                                              </span>
-                                              <span className="font-mono font-medium">
-                                                × {item.quantity}
-                                              </span>
-                                            </div>
-                                            <div className="border-t border-primary/20 pt-1.5 mt-1">
-                                              <div className="flex justify-between text-sm font-bold text-primary">
-                                                <span>Total</span>
-                                                <span>
-                                                  ₹{roundToInteger(
-                                                    item.total_price || 0,
-                                                  ).toLocaleString()}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {item.raw_materials &&
-                                  item.raw_materials.length > 0 && (
-                                    <div className="bg-secondary/20 rounded-lg p-3 space-y-1.5">
-                                      <div className="flex items-center gap-1.5">
-                                        <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                          Raw Materials
-                                        </p>
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[9px] px-1.5 py-0"
-                                        >
-                                          {item.raw_materials.length}
-                                        </Badge>
-                                      </div>
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {item.raw_materials.map(
-                                          (rm: any, idx: number) => (
-                                            <Badge
-                                              key={idx}
-                                              variant="secondary"
-                                              className="text-[10px] px-2 py-0.5 rounded-md"
-                                            >
-                                              {rm.rm_name || rm.name}
-                                              {rm.rm_qty &&
-                                                ` (${rm.rm_qty} ${rm.unit_name || ""})`}
-                                            </Badge>
-                                          ),
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                <div>
-                                  <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1">
-                                    <Info className="w-3 h-3" />
-                                    Remark
-                                  </Label>
-                                  <Textarea
-                                    value={item.remark || ""}
-                                    onChange={(e) =>
-                                      updateRoomItem(room.id, item.id, {
-                                        remark: e.target.value,
-                                      })
-                                    }
-                                    placeholder="Any specific requirement..."
-                                    rows={2}
-                                    className="rounded-lg text-sm resize-none"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              </div>
-            )}
-          </Card>
-        );
-      })}
+            return (
+              <SortableRoomCard
+                key={room.id}
+                room={room}
+                isExpanded={isExpanded}
+                toggleRoom={toggleRoom}
+                toggleRoomSelection={toggleRoomSelection}
+                updateRoomItem={updateRoomItem}
+                removeProductFromRoom={removeProductFromRoom}
+                getProductDropdownOptions={getProductDropdownOptions}
+                handleProductDropdownChange={handleProductDropdownChange}
+                selectedProductId={selectedProductId}
+                isSelected={isSelected}
+                roomTotal={roomTotal}
+                includedCount={includedCount}
+                totalItems={totalItems}
+                getRoomIcon={getRoomIcon}
+                calculateTotalMeasure={calculateTotalMeasure}
+                getQtyTypeLabel={getQtyTypeLabel}
+                getUnitLabel={getUnitLabel}
+              />
+            );
+          })}
+        </SortableContext>
+      </DndContext>
 
       {/* Bottom Save Bar */}
       {rooms.some(r => r.selected) && (

@@ -1,5 +1,4 @@
-// src/pages/QuotationEdit.tsx - Complete updated file
-
+// src/pages/QuotationEdit.tsx
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -70,9 +69,30 @@ import {
   Check,
   Calculator,
   Home,
+  GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ─── dnd-kit imports ──────────────────────────────────────────────────────
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// ─── Status Colors ────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
   Pending:
     "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800",
@@ -97,23 +117,299 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const roundToTwo = (n: number) => Math.round(n * 100) / 100;
+const formatNumberForDisplay = (value: number | undefined | null): string =>
+  value === undefined || value === null || value === 0 ? "" : String(value);
+const parseNumberFromInput = (value: string): number =>
+  value === "" || value === null || value === undefined ? 0 : parseFloat(value) || 0;
 
-// Helper to format number for display - shows empty string for 0
-const formatNumberForDisplay = (value: number | undefined | null): string => {
-  if (value === undefined || value === null || value === 0) {
-    return "";
-  }
-  return String(value);
-};
+// ─── Sortable Room Item ──────────────────────────────────────────────────
+interface SortableRoomItemProps {
+  room: any;
+  isExpanded: boolean;
+  toggleRoom: (id: string) => void;
+  openAddProductDialog: (roomId: string) => void;
+  handleEditItem: (room: any, item: any) => void;
+  onDeleteRoom: (qrId: string, roomName: string) => void;
+  onDeleteItem: (qpId: string, productName: string) => void;
+  formatCurrency: (amount: number) => string;
+  getQtyTypeLabel: (type: string) => string;
+}
 
-// Helper to parse number from input - returns 0 if empty
-const parseNumberFromInput = (value: string): number => {
-  if (value === "" || value === null || value === undefined) {
-    return 0;
-  }
-  return parseFloat(value) || 0;
-};
+function SortableRoomItem({
+  room,
+  isExpanded,
+  toggleRoom,
+  openAddProductDialog,
+  handleEditItem,
+  onDeleteRoom,
+  onDeleteItem,
+  formatCurrency,
+  getQtyTypeLabel,
+}: SortableRoomItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: room.qr_id });
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const roomTotal = parseFloat(room.room_total) || 0;
+  const items = room.items || [];
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div className="rounded-xl border border-border overflow-hidden">
+        {/* Room Header – draggable handle is the grip icon */}
+        <div
+          className={cn(
+            "flex items-center justify-between p-4 bg-secondary/30 hover:bg-secondary/50 transition-colors",
+            isExpanded && "bg-secondary/50"
+          )}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {/* Drag Handle */}
+            <div
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-primary transition-colors p-1 -ml-1 shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="w-4 h-4 md:w-5 md:h-5" />
+            </div>
+
+            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div
+              className="min-w-0 flex-1 cursor-pointer"
+              onClick={() => toggleRoom(room.qr_id)}
+            >
+              <h4 className="font-semibold text-foreground truncate">
+                {room.room_name || `Room ${room.sort_order + 1}`}
+              </h4>
+              <p className="text-xs text-muted-foreground">{items.length} items</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRoom(room.qr_id, room.room_name || `Room ${room.sort_order + 1}`);
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+            <span className="font-semibold text-foreground whitespace-nowrap">
+              {formatCurrency(roomTotal)}
+            </span>
+            <ChevronUp
+              className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "" : "rotate-180"}`}
+              onClick={() => toggleRoom(room.qr_id)}
+            />
+          </div>
+        </div>
+
+        {/* Room Content */}
+        {isExpanded && (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Products</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 rounded-lg text-xs"
+                onClick={() => openAddProductDialog(room.qr_id)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Product
+              </Button>
+            </div>
+
+            {items.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <p className="text-sm">No items in this room</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-1"
+                  onClick={() => openAddProductDialog(room.qr_id)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Product
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {items.map((item: any, idx: number) => {
+                  const calculatedQty = parseFloat(item.calculated_qty) || 0;
+                  const unitPrice = parseFloat(item.unit_price) || 0;
+                  const totalPrice = parseFloat(item.total_price) || 0;
+                  const qtyType = item.qty_type || "Fixed";
+                  const isFixedItem = qtyType === "Fixed";
+
+                  return (
+                    <div
+                      key={item.qp_id || idx}
+                      className="rounded-lg border border-border/50 p-4 bg-card hover:border-primary/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-semibold text-foreground truncate">
+                            {item.product_name}
+                          </h5>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-[10px]">
+                              {getQtyTypeLabel(qtyType)}
+                            </Badge>
+                            {item.is_special === "1" && (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-200"
+                              >
+                                Special
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <div className="text-right mr-2">
+                            <p className="font-bold text-primary">
+                              {formatCurrency(totalPrice)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Unit: {formatCurrency(unitPrice)}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            onClick={() => handleEditItem(room, item)}
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() =>
+                              onDeleteItem(item.qp_id, item.product_name)
+                            }
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm bg-muted/20 rounded-lg p-3 mb-3">
+                        {isFixedItem ? (
+                          <>
+                            <div>
+                              <span className="text-muted-foreground">Qty</span>
+                              <p className="font-medium">{item.qty || 0}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Per</span>
+                              <p className="font-medium">NOS</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Measure</span>
+                              <p className="font-medium">{calculatedQty.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Rate</span>
+                              <p className="font-medium">{formatCurrency(unitPrice)}</p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <span className="text-muted-foreground">Dimensions</span>
+                              <p className="font-medium text-xs">
+                                {(() => {
+                                  switch (qtyType) {
+                                    case "ByHW":
+                                      return `${item.height || 0} × ${item.width || 0}`;
+                                    case "ByHWD":
+                                      return `${item.height || 0} × ${item.width || 0} × ${item.depth || 0}`;
+                                    case "ByHWL":
+                                      return `${item.height || 0} × ${item.width || 0} × ${item.length || 0}`;
+                                    default:
+                                      return `${item.height || 0} × ${item.width || 0}`;
+                                  }
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Per</span>
+                              <p className="font-medium">SQFT</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Measure</span>
+                              <p className="font-medium">{calculatedQty.toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Rate</span>
+                              <p className="font-medium">{formatCurrency(unitPrice)}</p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {item.raw_materials && item.raw_materials.length > 0 && (
+                        <div className="bg-secondary/10 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Raw Materials
+                            </p>
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                              {item.raw_materials.length}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {item.raw_materials.map((rm: any, rIdx: number) => (
+                              <Badge
+                                key={rIdx}
+                                variant="secondary"
+                                className="text-xs px-2 py-1 rounded-md"
+                              >
+                                {rm.rm_name || rm.name || "Material"}
+                                {rm.required_qty &&
+                                  ` (${parseFloat(rm.required_qty).toFixed(2)} ${rm.unit || ""})`}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {item.remark && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          <span className="font-medium">Remark:</span> {item.remark}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────
 export default function QuotationEdit() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -126,6 +422,9 @@ export default function QuotationEdit() {
   const [statusRemark, setStatusRemark] = useState("");
   const [updating, setUpdating] = useState(false);
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
+
+  // Room order state (for drag‑and‑drop)
+  const [roomOrder, setRoomOrder] = useState<any[]>([]);
 
   // Product edit state
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -156,6 +455,14 @@ export default function QuotationEdit() {
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<{ qpId: string; productName: string } | null>(null);
   const [confirmDeleteRoom, setConfirmDeleteRoom] = useState<{ qrId: string; roomName: string } | null>(null);
 
+  // ─── DND Sensors ────────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   const getCompanyId = (): string => {
     try {
       const raw = localStorage.getItem("company_data");
@@ -174,6 +481,7 @@ export default function QuotationEdit() {
     }
   };
 
+  // ─── Data Fetching ────────────────────────────────────────────────────
   const fetchData = async () => {
     if (!id) return;
     setLoading(true);
@@ -191,8 +499,11 @@ export default function QuotationEdit() {
         setGstPercent(quotationRes.data.gst_percent || 0);
         setIsGstApplicable(quotationRes.data.gst_applicable !== false);
 
-        if (quotationRes.data.rooms && quotationRes.data.rooms.length > 0) {
-          setExpandedRooms(new Set([quotationRes.data.rooms[0].qr_id]));
+        // Set room order from the fetched data (already sorted by sort_order)
+        const rooms = quotationRes.data.rooms || [];
+        setRoomOrder(rooms);
+        if (rooms.length > 0) {
+          setExpandedRooms(new Set([rooms[0].qr_id]));
         }
       } else {
         toast({
@@ -246,7 +557,7 @@ export default function QuotationEdit() {
       if (!companyId) return;
       const res = await roomService.getRooms(companyId);
       if (res.status === "success" && res.data) {
-        const existingRoomIds = quotation?.rooms?.map((r: any) => r.room_id) || [];
+        const existingRoomIds = roomOrder.map((r: any) => r.room_id);
         const available = res.data.filter((r: any) => !existingRoomIds.includes(r.room_id));
         setAvailableRooms(available);
       }
@@ -266,6 +577,7 @@ export default function QuotationEdit() {
     fetchProducts();
   }, [id]);
 
+  // ─── Status Update ──────────────────────────────────────────────────
   const handleUpdateStatus = async () => {
     if (!selectedStatus || !quotation?.quotation_id) return;
 
@@ -302,6 +614,7 @@ export default function QuotationEdit() {
     }
   };
 
+  // ─── Room Toggle ────────────────────────────────────────────────────
   const toggleRoom = (roomId: string) => {
     setExpandedRooms((prev) => {
       const newSet = new Set(prev);
@@ -314,6 +627,7 @@ export default function QuotationEdit() {
     });
   };
 
+  // ─── Helpers ────────────────────────────────────────────────────────
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
     return new Date(dateStr).toLocaleDateString("en-IN", {
@@ -369,7 +683,7 @@ export default function QuotationEdit() {
     return roundToTwo(totalMeasure * unitPrice);
   };
 
-  // Handle edit item
+  // ─── Edit Item ─────────────────────────────────────────────────────
   const handleEditItem = (room: any, item: any) => {
     setEditingItem({
       ...item,
@@ -381,7 +695,6 @@ export default function QuotationEdit() {
     setEditDialogOpen(true);
   };
 
-  // Handle save item changes
   const handleSaveItemEdit = async () => {
     if (!editingItem || !quotation) return;
 
@@ -441,7 +754,7 @@ export default function QuotationEdit() {
     }
   };
 
-  // Handle delete item
+  // ─── Delete Item ──────────────────────────────────────────────────
   const handleDeleteItem = async () => {
     if (!confirmDeleteItem || !quotation) return;
 
@@ -478,7 +791,14 @@ export default function QuotationEdit() {
     }
   };
 
-  // Handle add product to room
+  // ─── Add Product ──────────────────────────────────────────────────
+  const openAddProductDialog = (roomId: string) => {
+    setSelectedRoomForProduct(roomId);
+    setSelectedProductToAdd("");
+    setProductQuantity(1);
+    setAddProductDialogOpen(true);
+  };
+
   const handleAddProduct = async () => {
     if (!quotation || !selectedRoomForProduct || !selectedProductToAdd) return;
 
@@ -488,8 +808,7 @@ export default function QuotationEdit() {
       return;
     }
 
-    // Check if product already exists in this room
-    const room = quotation.rooms?.find((r: any) => r.qr_id === selectedRoomForProduct);
+    const room = roomOrder.find((r: any) => r.qr_id === selectedRoomForProduct);
     const existingProduct = room?.items?.find((i: any) => i.product_id === selectedProductToAdd);
     if (existingProduct) {
       toast({
@@ -557,7 +876,7 @@ export default function QuotationEdit() {
     }
   };
 
-  // Handle add room
+  // ─── Add Room ──────────────────────────────────────────────────────
   const handleAddRoom = async () => {
     if (!quotation || !selectedRoomToAdd) return;
 
@@ -595,7 +914,7 @@ export default function QuotationEdit() {
     }
   };
 
-  // Handle delete room
+  // ─── Delete Room ──────────────────────────────────────────────────
   const handleDeleteRoom = async () => {
     if (!confirmDeleteRoom || !quotation) return;
 
@@ -632,7 +951,7 @@ export default function QuotationEdit() {
     }
   };
 
-  // Handle update discount & GST
+  // ─── Discount & GST ──────────────────────────────────────────────
   const handleUpdateDiscountGst = async () => {
     if (!quotation) return;
 
@@ -685,6 +1004,44 @@ export default function QuotationEdit() {
     }
   };
 
+  // ─── Drag End Handler ──────────────────────────────────────────────
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    // Find indices in the current roomOrder
+    const oldIndex = roomOrder.findIndex((room) => room.qr_id === active.id);
+    const newIndex = roomOrder.findIndex((room) => room.qr_id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Reorder locally
+    const newOrder = arrayMove(roomOrder, oldIndex, newIndex);
+    setRoomOrder(newOrder);
+
+    // Prepare payload for API: assign sort_order based on new index
+    const roomOrderPayload = newOrder.map((room, index) => ({
+      qr_id: room.qr_id,
+      sort_order: index,
+    }));
+
+    // Update database
+    try {
+      await quotationService.updateRoomSortOrder(quotation!.quotation_id, roomOrderPayload);
+      toast({ title: "Success", description: "Room order updated" });
+      // Optionally refresh data to get updated sort_order from server
+      // await fetchData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update room order",
+        variant: "destructive",
+      });
+      // Revert to previous order on error
+      setRoomOrder(roomOrder);
+    }
+  };
+
+  // ─── Render ────────────────────────────────────────────────────────
   const clientData = quotation
     ? {
       name: quotation.client_name || "—",
@@ -732,21 +1089,13 @@ export default function QuotationEdit() {
     );
   }
 
-  // Get available products for a room (excluding already added ones)
+  // Available products for a room (excluding already added)
   const getAvailableProducts = (roomId: string) => {
-    const room = quotation.rooms?.find((r: any) => r.qr_id === roomId);
+    const room = roomOrder.find((r: any) => r.qr_id === roomId);
     const addedProductIds = room?.items?.map((i: any) => i.product_id) || [];
     return products.filter((p) => !addedProductIds.includes(p.product_id));
   };
 
-  const openAddProductDialog = (roomId: string) => {
-    setSelectedRoomForProduct(roomId);
-    setSelectedProductToAdd("");
-    setProductQuantity(1);
-    setAddProductDialogOpen(true);
-  };
-
-  // Get dimension fields based on qty type
   const getDimensionFields = (qtyType: string) => {
     switch (qtyType) {
       case "ByHW":
@@ -917,7 +1266,7 @@ export default function QuotationEdit() {
               )}
             </Card>
 
-            {/* Room-wise Breakdown with Edit */}
+            {/* Room-wise Breakdown with Drag & Drop */}
             <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
@@ -937,248 +1286,8 @@ export default function QuotationEdit() {
                   Add Room
                 </Button>
               </div>
-              {quotation.rooms && quotation.rooms.length > 0 ? (
-                <div className="space-y-4">
-                  {quotation.rooms.map((room: any) => {
-                    const isExpanded = expandedRooms.has(room.qr_id);
-                    const roomTotal = parseFloat(room.room_total) || 0;
-                    const items = room.items || [];
 
-                    return (
-                      <div
-                        key={room.qr_id}
-                        className="rounded-xl border border-border overflow-hidden"
-                      >
-                        <div
-                          className="flex items-center justify-between p-4 bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors"
-                          onClick={() => toggleRoom(room.qr_id)}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                            <div className="min-w-0">
-                              <h4 className="font-semibold text-foreground truncate">
-                                {room.room_name || `Room ${room.sort_order + 1}`}
-                              </h4>
-                              <p className="text-xs text-muted-foreground">
-                                {items.length} items
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmDeleteRoom({
-                                  qrId: room.qr_id,
-                                  roomName: room.room_name || `Room ${room.sort_order + 1}`,
-                                });
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                            <span className="font-semibold text-foreground">
-                              {formatCurrency(roomTotal)}
-                            </span>
-                            <ChevronUp
-                              className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "" : "rotate-180"}`}
-                            />
-                          </div>
-                        </div>
-
-                        {isExpanded && (
-                          <div className="p-4 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-muted-foreground">Products</span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-1 rounded-lg text-xs"
-                                onClick={() => openAddProductDialog(room.qr_id)}
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                Add Product
-                              </Button>
-                            </div>
-
-                            {items.map((item: any, idx: number) => {
-                              const calculatedQty = parseFloat(item.calculated_qty) || 0;
-                              const unitPrice = parseFloat(item.unit_price) || 0;
-                              const totalPrice = parseFloat(item.total_price) || 0;
-                              const qtyType = item.qty_type || "Fixed";
-                              const isFixedItem = qtyType === "Fixed";
-
-                              return (
-                                <div
-                                  key={item.qp_id || idx}
-                                  className="rounded-lg border border-border/50 p-4 bg-card hover:border-primary/30 transition-colors"
-                                >
-                                  <div className="flex items-start justify-between mb-3">
-                                    <div className="flex-1 min-w-0">
-                                      <h5 className="font-semibold text-foreground truncate">
-                                        {item.product_name}
-                                      </h5>
-                                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                                        <Badge variant="outline" className="text-[10px]">
-                                          {getQtyTypeLabel(qtyType)}
-                                        </Badge>
-                                        {item.is_special === "1" && (
-                                          <Badge
-                                            variant="secondary"
-                                            className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-200"
-                                          >
-                                            Special
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0 ml-2">
-                                      <div className="text-right mr-2">
-                                        <p className="font-bold text-primary">
-                                          {formatCurrency(totalPrice)}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                          Unit: {formatCurrency(unitPrice)}
-                                        </p>
-                                      </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10"
-                                        onClick={() => handleEditItem(room, item)}
-                                      >
-                                        <Edit className="w-3.5 h-3.5" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                        onClick={() => {
-                                          setConfirmDeleteItem({
-                                            qpId: item.qp_id,
-                                            productName: item.product_name,
-                                          });
-                                        }}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </Button>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm bg-muted/20 rounded-lg p-3 mb-3">
-                                    {isFixedItem ? (
-                                      <>
-                                        <div>
-                                          <span className="text-muted-foreground">Qty</span>
-                                          <p className="font-medium">{item.qty || 0}</p>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Per</span>
-                                          <p className="font-medium">NOS</p>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Measure</span>
-                                          <p className="font-medium">{calculatedQty.toFixed(2)}</p>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Rate</span>
-                                          <p className="font-medium">{formatCurrency(unitPrice)}</p>
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div>
-                                          <span className="text-muted-foreground">Dimensions</span>
-                                          <p className="font-medium text-xs">
-                                            {(() => {
-                                              switch (qtyType) {
-                                                case "ByHW":
-                                                  return `${item.height || 0} × ${item.width || 0}`;
-                                                case "ByHWD":
-                                                  return `${item.height || 0} × ${item.width || 0} × ${item.depth || 0}`;
-                                                case "ByHWL":
-                                                  return `${item.height || 0} × ${item.width || 0} × ${item.length || 0}`;
-                                                default:
-                                                  return `${item.height || 0} × ${item.width || 0}`;
-                                              }
-                                            })()}
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Per</span>
-                                          <p className="font-medium">SQFT</p>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Measure</span>
-                                          <p className="font-medium">{calculatedQty.toFixed(2)}</p>
-                                        </div>
-                                        <div>
-                                          <span className="text-muted-foreground">Rate</span>
-                                          <p className="font-medium">{formatCurrency(unitPrice)}</p>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-
-                                  {item.raw_materials && item.raw_materials.length > 0 && (
-                                    <div className="bg-secondary/10 rounded-lg p-3">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                          Raw Materials
-                                        </p>
-                                        <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                                          {item.raw_materials.length}
-                                        </Badge>
-                                      </div>
-                                      <div className="flex flex-wrap gap-2">
-                                        {item.raw_materials.map((rm: any, rIdx: number) => (
-                                          <Badge
-                                            key={rIdx}
-                                            variant="secondary"
-                                            className="text-xs px-2 py-1 rounded-md"
-                                          >
-                                            {rm.rm_name || rm.name || "Material"}
-                                            {rm.required_qty &&
-                                              ` (${parseFloat(rm.required_qty).toFixed(2)} ${rm.unit || ""})`}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {item.remark && (
-                                    <div className="mt-2 text-xs text-muted-foreground">
-                                      <span className="font-medium">Remark:</span> {item.remark}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                            {items.length === 0 && (
-                              <div className="text-center py-6 text-muted-foreground">
-                                <p className="text-sm">No items in this room</p>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="mt-2 gap-1"
-                                  onClick={() => openAddProductDialog(room.qr_id)}
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  Add Product
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
+              {roomOrder.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <p className="text-sm">No rooms found</p>
                   <Button
@@ -1194,6 +1303,38 @@ export default function QuotationEdit() {
                     Add Room
                   </Button>
                 </div>
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={roomOrder.map((room) => room.qr_id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-4">
+                      {roomOrder.map((room) => (
+                        <SortableRoomItem
+                          key={room.qr_id}
+                          room={room}
+                          isExpanded={expandedRooms.has(room.qr_id)}
+                          toggleRoom={toggleRoom}
+                          openAddProductDialog={openAddProductDialog}
+                          handleEditItem={handleEditItem}
+                          onDeleteRoom={(qrId, roomName) =>
+                            setConfirmDeleteRoom({ qrId, roomName })
+                          }
+                          onDeleteItem={(qpId, productName) =>
+                            setConfirmDeleteItem({ qpId, productName })
+                          }
+                          formatCurrency={formatCurrency}
+                          getQtyTypeLabel={getQtyTypeLabel}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               )}
             </Card>
 
@@ -1362,6 +1503,7 @@ export default function QuotationEdit() {
         </div>
       </div>
 
+      {/* ─── Dialogs ────────────────────────────────────────────────────── */}
       {/* Status Update Dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent className="sm:max-w-md rounded-2xl">
@@ -1425,7 +1567,7 @@ export default function QuotationEdit() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Item Dialog with Price Breakdown and conditional dimensions */}
+      {/* Edit Item Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
@@ -1480,7 +1622,6 @@ export default function QuotationEdit() {
                 </div>
               </div>
 
-              {/* Conditional Dimension Fields based on qty_type */}
               {editingItem.qty_type !== "Fixed" && (
                 <div className="grid grid-cols-2 gap-2">
                   {(() => {
@@ -1634,7 +1775,7 @@ export default function QuotationEdit() {
                 />
               </div>
 
-              {/* Price Breakdown - Detailed */}
+              {/* Price Breakdown */}
               <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl p-4 border border-primary/20">
                 <div className="flex items-center gap-2 mb-3">
                   <Calculator className="w-4 h-4 text-primary" />

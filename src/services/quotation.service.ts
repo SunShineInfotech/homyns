@@ -338,7 +338,43 @@ export class QuotationService extends BaseService {
       };
     }
   }
+
+  // Add this private method to get company_id from localStorage
+  private getCompanyId(): string {
+    try {
+      const raw = localStorage.getItem("company_data");
+      if (raw) return JSON.parse(raw)?.company_id || "";
+    } catch {
+      return "";
+    }
+    return "";
+  }
+
+  /**
+   * Update room sort order
+   */
+  async updateRoomSortOrder(quotationId: string, roomOrder: { qr_id: string; sort_order: number }[]): Promise<ApiResponse> {
+    try {
+      const payload = {
+        type: 15,
+        quotation_id: quotationId,
+        room_order: roomOrder,
+        company_id: this.getCompanyId(),
+      };
+      console.log('Update room sort order payload:', payload);
+      const response = await this.post<ApiResponse>(payload);
+      return response;
+    } catch (error: any) {
+      console.error('Update room sort order error:', error);
+      return {
+        status: 'error',
+        message: error.response?.data?.message || 'Failed to update room order'
+      };
+    }
+  }
 }
+
+
 
 // Export singleton instance
 export const quotationService = new QuotationService();
