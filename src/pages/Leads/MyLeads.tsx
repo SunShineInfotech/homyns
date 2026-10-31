@@ -25,6 +25,7 @@ import { toast } from "@/hooks/use-toast";
 import { leadService, Lead } from "@/services/lead.service";
 import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
+import { getIndiaDate } from "@/lib/india-date";
 import {
   Search,
   Loader2,
@@ -84,14 +85,8 @@ export default function MyLeads() {
   // Filter states
   const [filterSource, setFilterSource] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState<string>(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 14);
-    return date.toISOString().split("T")[0];
-  });
-  const [toDate, setToDate] = useState<string>(() => {
-    return new Date().toISOString().split("T")[0];
-  });
+  const [fromDate, setFromDate] = useState<string>(() => getIndiaDate(-2));
+  const [toDate, setToDate] = useState<string>(() => getIndiaDate());
 
   const getCompanyId = (): string => {
     try {
@@ -360,10 +355,8 @@ export default function MyLeads() {
   const clearFilters = () => {
     setFilterSource("");
     setFilterStatus([]);
-    const date = new Date();
-    date.setDate(date.getDate() - 14);
-    setFromDate(date.toISOString().split("T")[0]);
-    setToDate(new Date().toISOString().split("T")[0]);
+    setFromDate(getIndiaDate(-2));
+    setToDate(getIndiaDate());
     clearCustomerSearch();
   };
 

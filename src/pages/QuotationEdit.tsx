@@ -1,5 +1,5 @@
 // src/pages/QuotationEdit.tsx
-import { useState, useEffect } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card } from "@/components/ui/card";
@@ -41,8 +41,12 @@ import {
   QuotationStatusHistory,
 } from "@/services/quotation-status.service";
 import { productService, Product } from "@/services/product.service";
+import { productCategoryService } from "@/services/product-category.service";
+import { unitService } from "@/services/unit.service";
 import { roomService, Room } from "@/services/room.service";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { WorkOrderManager } from "@/components/quotation/WorkOrderManager";
+import { PRODUCTION_STATUSES, WORK_ORDER_PRIORITIES } from "@/services/workorder.service";
 import {
   ArrowLeft,
   Loader2,
@@ -70,6 +74,9 @@ import {
   Calculator,
   Home,
   GripVertical,
+  ClipboardList,
+  Sparkles,
+  Ruler,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -100,20 +107,39 @@ const STATUS_COLORS: Record<string, string> = {
     "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800",
   "Sent to Customer":
     "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800",
+  "Revision Requested":
+    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800",
   "Approved by Customer":
     "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800",
+  "Rejected by Customer":
+    "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
   "Invoice Generated":
     "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800",
-  "Work Started":
+  "Work In Progress":
     "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:border-cyan-800",
-  "On Going":
-    "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800",
   "Work Completed":
     "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800",
+  "Work Stop Due To Payment":
+    "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800",
   Closed:
     "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800/30 dark:text-gray-400 dark:border-gray-700",
   Rejected:
     "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800",
+};
+
+const PRODUCTION_STATUS_STYLES: Record<number, string> = {
+  1: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  2: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  3: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  4: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  5: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+};
+
+const WORK_ORDER_PRIORITY_STYLES: Record<number, string> = {
+  1: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  2: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  3: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
+  4: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 const roundToTwo = (n: number) => Math.round(n * 100) / 100;
@@ -126,6 +152,8 @@ const parseNumberFromInput = (value: string): number =>
 interface SortableRoomItemProps {
   room: any;
   isExpanded: boolean;
+  showWorkOrders: boolean;
+  onOpenWorkOrder: (product: any) => void;
   toggleRoom: (id: string) => void;
   openAddProductDialog: (roomId: string) => void;
   handleEditItem: (room: any, item: any) => void;
@@ -138,6 +166,8 @@ interface SortableRoomItemProps {
 function SortableRoomItem({
   room,
   isExpanded,
+  showWorkOrders,
+  onOpenWorkOrder,
   toggleRoom,
   openAddProductDialog,
   handleEditItem,
@@ -397,6 +427,43 @@ function SortableRoomItem({
                           <span className="font-medium">Remark:</span> {item.remark}
                         </div>
                       )}
+
+                      {showWorkOrders && (
+                        <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Production status</span>
+                            {item.work_order_no && <span className="font-mono text-[11px] text-muted-foreground">{item.work_order_no}</span>}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className={`border-0 ${PRODUCTION_STATUS_STYLES[Number(item.production_status || 1)] || PRODUCTION_STATUS_STYLES[1]}`}>
+                              {item.production_status_title || PRODUCTION_STATUSES.find((status) => status.value === Number(item.production_status || 1))?.label || "Pending"}
+                            </Badge>
+                            <Badge className={`border-0 ${WORK_ORDER_PRIORITY_STYLES[Number(item.priority || 2)] || WORK_ORDER_PRIORITY_STYLES[2]}`}>
+                              {item.priority_title || WORK_ORDER_PRIORITIES.find((priority) => priority.value === Number(item.priority || 2))?.label || "Normal"} priority
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Assigned to: <span className="font-medium text-foreground">{item.assigned_name || "Unassigned"}</span>
+                          </p>
+                          {item.latest_work_status && (
+                            <div className="rounded-md bg-background/70 px-2.5 py-2 text-xs space-y-1">
+                              <p className="text-muted-foreground">
+                                Latest update: <span className="font-medium text-foreground">{item.latest_work_status.remark || "No remark"}</span>
+                              </p>
+                              {(item.latest_work_status.c_date || item.latest_work_status.c_time) && (
+                                <p className="text-muted-foreground">
+                                  {item.latest_work_status.c_date || ""}{item.latest_work_status.c_date && item.latest_work_status.c_time ? " · " : ""}{item.latest_work_status.c_time || ""}
+                                  {item.latest_work_status.emp_name ? ` · ${item.latest_work_status.emp_name}` : ""}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          <Button type="button" variant="outline" size="sm" className="w-full gap-2 rounded-lg" onClick={() => onOpenWorkOrder(item)}>
+                            <ClipboardList className="h-4 w-4" />
+                            Update product work order
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -422,6 +489,8 @@ export default function QuotationEdit() {
   const [statusRemark, setStatusRemark] = useState("");
   const [updating, setUpdating] = useState(false);
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
+  const [workOrderManagerOpen, setWorkOrderManagerOpen] = useState(false);
+  const [workOrderProduct, setWorkOrderProduct] = useState<any | null>(null);
 
   // Room order state (for drag‑and‑drop)
   const [roomOrder, setRoomOrder] = useState<any[]>([]);
@@ -443,6 +512,17 @@ export default function QuotationEdit() {
   const [selectedRoomForProduct, setSelectedRoomForProduct] = useState<string>("");
   const [selectedProductToAdd, setSelectedProductToAdd] = useState<string>("");
   const [productQuantity, setProductQuantity] = useState(1);
+  const [quickAddProductOpen, setQuickAddProductOpen] = useState(false);
+  const [quickAddProductSaving, setQuickAddProductSaving] = useState(false);
+  const [productCategories, setProductCategories] = useState<any[]>([]);
+  const [productUnits, setProductUnits] = useState<any[]>([]);
+  const [quickProduct, setQuickProduct] = useState({ product_name: "", category_id: "", qty_type: "Fixed", height: 0, width: 0, depth: 0, length: 0, dimension_unit_id: "", price: 0, gst_percent: 0, description: "" });
+
+  // Room-wise bulk pricing dialog.
+  const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
+  const [bulkUnitPrices, setBulkUnitPrices] = useState<Record<string, string>>({});
+  const [bulkItemEdits, setBulkItemEdits] = useState<Record<string, { qty_type?: string; qty?: string; dimension_unit?: string }>>({});
+  const [bulkDeletedItemIds, setBulkDeletedItemIds] = useState<string[]>([]);
 
   // Discount & GST Edit
   const [discountEditOpen, setDiscountEditOpen] = useState(false);
@@ -482,18 +562,29 @@ export default function QuotationEdit() {
   };
 
   // ─── Data Fetching ────────────────────────────────────────────────────
-  const fetchData = async () => {
+  const fetchData = async (showPageLoader = true) => {
     if (!id) return;
-    setLoading(true);
+    if (showPageLoader) setLoading(true);
     try {
       const [quotationRes, historyRes] = await Promise.all([
         quotationService.getQuotation(id),
         quotationStatusService.getStatusHistory(id),
       ]);
 
+      // The status history is the source of truth when the quotation row's
+      // status is stale. The API returns history oldest-first, so the last
+      // entry is the current quotation status.
+      const history = historyRes.status === "success" && Array.isArray(historyRes.data)
+        ? historyRes.data
+        : [];
+      const latestHistoryStatus = history.length > 0
+        ? String(history[history.length - 1].status || "").trim()
+        : "";
+
       if (quotationRes.status === "success" && quotationRes.data) {
-        setQuotation(quotationRes.data);
-        setSelectedStatus(quotationRes.data.status || "Pending");
+        const currentStatus = latestHistoryStatus || quotationRes.data.status || "Pending";
+        setQuotation({ ...quotationRes.data, status: currentStatus });
+        setSelectedStatus(currentStatus);
         setDiscountType((quotationRes.data.discount_type as "Percent" | "INR") || "INR");
         setDiscountValue(quotationRes.data.discount_value || 0);
         setGstPercent(quotationRes.data.gst_percent || 0);
@@ -502,9 +593,11 @@ export default function QuotationEdit() {
         // Set room order from the fetched data (already sorted by sort_order)
         const rooms = quotationRes.data.rooms || [];
         setRoomOrder(rooms);
-        if (rooms.length > 0) {
-          setExpandedRooms(new Set([rooms[0].qr_id]));
-        }
+        setExpandedRooms((current) => {
+          const availableIds = new Set(rooms.map((room: any) => String(room.qr_id)));
+          const stillExpanded = [...current].filter((roomId) => availableIds.has(String(roomId)));
+          return new Set(stillExpanded.length ? stillExpanded : rooms.length ? [rooms[0].qr_id] : []);
+        });
       } else {
         toast({
           title: "Error",
@@ -515,9 +608,7 @@ export default function QuotationEdit() {
         return;
       }
 
-      if (historyRes.status === "success" && historyRes.data) {
-        setStatusHistory(historyRes.data);
-      }
+      setStatusHistory(history);
     } catch (e: any) {
       toast({
         title: "Error",
@@ -526,7 +617,7 @@ export default function QuotationEdit() {
       });
       navigate("/quotations");
     } finally {
-      setLoading(false);
+      if (showPageLoader) setLoading(false);
     }
   };
 
@@ -592,10 +683,21 @@ export default function QuotationEdit() {
       });
 
       if (res.status === "success") {
-        toast({ title: "Success", description: "Status updated successfully" });
+        if (selectedStatus === "Work In Progress") {
+          const walletResult = res as typeof res & { wallet_updated?: boolean; wallet_added?: number; customer_wallet?: number };
+          if (walletResult.wallet_updated) {
+            const added = `₹${(Number(walletResult.wallet_added) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const balance = `₹${(Number(walletResult.customer_wallet) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            toast({ title: "Status and customer wallet updated", description: `${added} added to ${quotation.client_name || "the customer"}'s wallet. New wallet balance: ${balance}.` });
+          } else {
+            toast({ title: "Status updated; wallet update not confirmed", description: "The configured API did not confirm a wallet adjustment. Deploy the updated quotation API to the configured v2_api server folder.", variant: "destructive" });
+          }
+        } else {
+          toast({ title: "Success", description: "Status updated successfully" });
+        }
         setStatusDialogOpen(false);
         setStatusRemark("");
-        await fetchData();
+        await fetchData(false);
       } else {
         toast({
           title: "Error",
@@ -735,7 +837,7 @@ export default function QuotationEdit() {
       if (res.status === "success") {
         toast({ title: "Success", description: "Item updated successfully" });
         setEditDialogOpen(false);
-        await fetchData();
+        await fetchData(false);
       } else {
         toast({
           title: "Error",
@@ -772,7 +874,7 @@ export default function QuotationEdit() {
       if (res.status === "success") {
         toast({ title: "Success", description: "Item removed successfully" });
         setConfirmDeleteItem(null);
-        await fetchData();
+        await fetchData(false);
       } else {
         toast({
           title: "Error",
@@ -857,7 +959,7 @@ export default function QuotationEdit() {
         setAddProductDialogOpen(false);
         setSelectedProductToAdd("");
         setProductQuantity(1);
-        await fetchData();
+        await fetchData(false);
       } else {
         toast({
           title: "Error",
@@ -874,6 +976,55 @@ export default function QuotationEdit() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openQuickAddProductDialog = async () => {
+    setQuickProduct({ product_name: "", category_id: "", qty_type: "Fixed", height: 0, width: 0, depth: 0, length: 0, dimension_unit_id: "", price: 0, gst_percent: 0, description: "" });
+    setQuickAddProductOpen(true);
+    try {
+      const [categoryResult, unitResult] = await Promise.all([productCategoryService.getCategories(getCompanyId()), unitService.getUnits(getCompanyId())]);
+      if (categoryResult.status === "success") setProductCategories(categoryResult.data || []);
+      if (unitResult.status === "success") setProductUnits(unitResult.data || []);
+    } catch (e: any) {
+      toast({ title: "Could not load product form options", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleQuickAddProduct = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!quotation || !selectedRoomForProduct) return;
+    if (!quickProduct.product_name.trim() || !quickProduct.category_id || quickProduct.price <= 0) {
+      toast({ title: "Complete required product fields", description: "Product name, category, and a price above zero are required.", variant: "destructive" });
+      return;
+    }
+    setQuickAddProductSaving(true);
+    try {
+      const form = new FormData();
+      form.append("type", "1"); form.append("company_id", getCompanyId()); form.append("product_name", quickProduct.product_name.trim()); form.append("category_id", quickProduct.category_id);
+      form.append("qty_type", quickProduct.qty_type); form.append("height", String(quickProduct.height || 0)); form.append("width", String(quickProduct.width || 0));
+      form.append("depth", String(quickProduct.depth || 0)); form.append("length", String(quickProduct.length || 0)); form.append("dimension_unit_id", quickProduct.dimension_unit_id);
+      form.append("price", String(quickProduct.price)); form.append("gst_percent", String(quickProduct.gst_percent || 0)); form.append("description", quickProduct.description.trim());
+      form.append("status", "Active"); form.append("product_details", JSON.stringify([]));
+      const created: any = await productService.addProduct(form);
+      if (created.status !== "success") { toast({ title: "Could not create product", description: created.message, variant: "destructive" }); return; }
+
+      const refreshed = await productService.getProducts(getCompanyId());
+      const refreshedProducts = refreshed.status === "success" ? refreshed.data || [] : [];
+      setProducts(refreshedProducts);
+      const createdId = String(created.product_id || created.data?.product_id || "");
+      const product = refreshedProducts.find((p) => String(p.product_id) === createdId)
+        || refreshedProducts.filter((p) => p.product_name.trim() === quickProduct.product_name.trim()).sort((a, b) => Number(b.product_id) - Number(a.product_id))[0];
+      if (!product?.product_id) { toast({ title: "Product created", description: "The product is in your product master, but could not be linked to this quotation yet." }); setQuickAddProductOpen(false); return; }
+
+      const room = roomOrder.find((r: any) => String(r.qr_id) === String(selectedRoomForProduct));
+      const item = { product_id: product.product_id, qty_type: product.qty_type || "Fixed", qty: productQuantity || 1, height: Number(product.height) || 0, width: Number(product.width) || 0, depth: Number(product.depth) || 0, length: Number(product.length) || 0, dimension_unit: "inches", unit_price: Number(product.price) || 0 };
+      const result = await quotationService.addQuotationProduct({ type: 8, quotation_id: quotation.quotation_id, company_id: getCompanyId(), qr_id: selectedRoomForProduct, room_id: room?.room_id || "", ...item, total_price: calculateItemTotal(item), remark: "" });
+      if (result.status !== "success") { toast({ title: "Product created but not added", description: result.message || "Select it from the product list and add it again.", variant: "destructive" }); setQuickAddProductOpen(false); return; }
+      toast({ title: "Product created and added", description: `${product.product_name} was added to ${room?.room_name || "the selected room"}.` });
+      setQuickAddProductOpen(false); setAddProductDialogOpen(false); setSelectedProductToAdd(""); setProductQuantity(1); await fetchData(false);
+    } catch (e: any) {
+      toast({ title: "Could not create product", description: e?.response?.data?.message || e.message || "Something went wrong.", variant: "destructive" });
+    } finally { setQuickAddProductSaving(false); }
   };
 
   // ─── Add Room ──────────────────────────────────────────────────────
@@ -1002,6 +1153,80 @@ export default function QuotationEdit() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openBulkPriceDialog = () => {
+    const prices: Record<string, string> = {};
+    roomOrder.forEach((room: any) => (room.items || []).forEach((item: any) => { prices[String(item.qp_id)] = String(item.unit_price ?? 0); }));
+    setBulkUnitPrices(prices);
+    setBulkItemEdits({});
+    setBulkDeletedItemIds([]);
+    if (quotation) {
+      setDiscountType((quotation.discount_type as "Percent" | "INR") || "INR");
+      setDiscountValue(Number(quotation.discount_value) || 0);
+      setGstPercent(Number(quotation.gst_percent) || 0);
+      setIsGstApplicable(quotation.gst_applicable === true || Number(quotation.gst_applicable) === 1);
+    }
+    setBulkPriceOpen(true);
+  };
+
+  const bulkSubtotal = roomOrder.reduce((sum: number, room: any) => sum + (room.items || []).reduce((roomSum: number, item: any) => {
+    const key = String(item.qp_id); if (bulkDeletedItemIds.includes(key)) return roomSum;
+    const updated = { ...item, ...(bulkItemEdits[key] || {}), qty: Number(bulkItemEdits[key]?.qty ?? item.qty ?? 1), unit_price: Number(bulkUnitPrices[key] ?? item.unit_price) || 0 };
+    return roomSum + calculateItemTotal(updated);
+  }, 0), 0);
+  const bulkDiscountAmount = Math.min(bulkSubtotal, discountType === "Percent" ? bulkSubtotal * Math.min(100, Math.max(0, discountValue)) / 100 : Math.max(0, discountValue));
+  const bulkAfterDiscount = Math.max(0, bulkSubtotal - bulkDiscountAmount);
+  const bulkGstAmount = isGstApplicable ? bulkAfterDiscount * Math.max(0, gstPercent) / 100 : 0;
+  const bulkFinalAmount = bulkAfterDiscount + bulkGstAmount;
+
+  const saveBulkPricing = async () => {
+    if (!quotation) return;
+    setSaving(true);
+    try {
+      const updatedPrices = new Map<string, number>();
+      for (const qpId of bulkDeletedItemIds) {
+        const removed = await quotationService.deleteQuotationProduct({ type: 10, quotation_id: quotation.quotation_id, qp_id: qpId, company_id: getCompanyId() });
+        if (removed.status !== "success") { setBulkPriceOpen(false); await fetchData(false); toast({ title: "Could not remove product", description: removed.message || "The product could not be removed.", variant: "destructive" }); return; }
+      }
+      for (const room of roomOrder) {
+        for (const item of room.items || []) {
+          const qpId = String(item.qp_id || "");
+          if (bulkDeletedItemIds.includes(qpId)) continue;
+          const edit = bulkItemEdits[qpId] || {};
+          const changed = { ...item, ...edit, qty: Number(edit.qty ?? item.qty ?? 1), unit_price: Number(bulkUnitPrices[qpId] ?? item.unit_price) || 0 };
+          const price = Math.max(0, Number(bulkUnitPrices[qpId] ?? item.unit_price) || 0);
+          updatedPrices.set(qpId, price);
+          const itemChanged = (edit.qty_type && edit.qty_type !== item.qty_type)
+            || (edit.dimension_unit && edit.dimension_unit !== item.dimension_unit)
+            || (edit.qty !== undefined && Number(edit.qty) !== Number(item.qty || item.quantity || 1));
+          if (!qpId || (!itemChanged && Math.abs(price - (Number(item.unit_price) || 0)) < 0.005)) continue;
+          const payload = {
+            type: 9, quotation_id: quotation.quotation_id, qp_id: qpId, company_id: getCompanyId(), product_id: item.product_id,
+            qty_type: changed.qty_type || "Fixed", qty: changed.qty || 1, height: item.height || 0, width: item.width || 0,
+            depth: item.depth || 0, length: item.length || 0, dimension_unit: changed.dimension_unit || "feet", unit_price: price,
+            total_price: calculateItemTotal({ ...changed, unit_price: price }), remark: item.remark || "",
+          };
+          const update = await quotationService.updateQuotationProduct(payload);
+          if (update.status !== "success") { setBulkPriceOpen(false); await fetchData(false); toast({ title: "Some prices were saved", description: update.message || "The remaining prices could not be updated. Reopen Change Bulk Price to continue from the saved prices.", variant: "destructive" }); return; }
+        }
+      }
+      const subtotal = roundToTwo(roomOrder.reduce((sum: number, room: any) => sum + (room.items || []).reduce((roomSum: number, item: any) => {
+        const key = String(item.qp_id); if (bulkDeletedItemIds.includes(key)) return roomSum;
+        const edit = bulkItemEdits[key] || {};
+        return roomSum + calculateItemTotal({ ...item, ...edit, qty: Number(edit.qty ?? item.qty ?? 1), unit_price: updatedPrices.get(key) ?? Number(item.unit_price) });
+      }, 0), 0));
+      const discountAmount = roundToTwo(Math.min(subtotal, discountType === "Percent" ? subtotal * Math.min(100, Math.max(0, discountValue)) / 100 : Math.max(0, discountValue)));
+      const afterDiscount = Math.max(0, subtotal - discountAmount);
+      const gstAmount = roundToTwo(isGstApplicable ? afterDiscount * Math.max(0, gstPercent) / 100 : 0);
+      const result = await quotationService.updateQuotationDiscountGst({ type: 13, quotation_id: quotation.quotation_id, company_id: getCompanyId(), discount_type: discountType, discount_value: discountValue, discount_amount: discountAmount, amount_after_discount: afterDiscount, gst_applicable: isGstApplicable ? 1 : 0, gst_percent: gstPercent, gst_amount: gstAmount, final_amount: afterDiscount + gstAmount });
+      if (result.status !== "success") { setBulkPriceOpen(false); await fetchData(false); toast({ title: "Prices saved, discount/GST update failed", description: result.message || "Reopen Change Bulk Price to review and update totals.", variant: "destructive" }); return; }
+      toast({ title: "Quotation prices updated", description: "Product prices, discount, GST, and totals were saved." });
+      setBulkPriceOpen(false); await fetchData(false);
+    } catch (e: any) {
+      await fetchData(false);
+      toast({ title: "Could not save bulk pricing", description: e?.response?.data?.message || e.message || "Something went wrong.", variant: "destructive" });
+    } finally { setSaving(false); }
   };
 
   // ─── Drag End Handler ──────────────────────────────────────────────
@@ -1141,6 +1366,22 @@ export default function QuotationEdit() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="gap-2 rounded-xl" onClick={openBulkPriceDialog}>
+              <IndianRupee className="w-4 h-4" />Change Bulk Price
+            </Button>
+            {["Work In Progress", "Work Completed", "Work Stop Due To Payment"].includes(quotation.status || "") && (
+              <Button
+                variant="outline"
+                className="gap-2 rounded-xl"
+                onClick={() => {
+                  setWorkOrderProduct(null);
+                  setWorkOrderManagerOpen(true);
+                }}
+              >
+                <ClipboardList className="w-4 h-4" />
+                Work Orders
+              </Button>
+            )}
             <Button
               variant="outline"
               className="gap-2 rounded-xl"
@@ -1163,36 +1404,6 @@ export default function QuotationEdit() {
               Change Status
             </Button>
           </div>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4 bg-card border-border shadow-soft rounded-xl">
-            <p className="text-xs text-muted-foreground">Subtotal</p>
-            <p className="text-lg font-semibold">
-              {formatCurrency(quotation.subtotal || 0)}
-            </p>
-          </Card>
-          <Card className="p-4 bg-card border-border shadow-soft rounded-xl">
-            <p className="text-xs text-muted-foreground">Discount</p>
-            <p className="text-lg font-semibold text-destructive">
-              - {formatCurrency(quotation.discount_amount || 0)}
-            </p>
-          </Card>
-          <Card className="p-4 bg-card border-border shadow-soft rounded-xl">
-            <p className="text-xs text-muted-foreground">
-              GST ({quotation.gst_percent || 0}%)
-            </p>
-            <p className="text-lg font-semibold">
-              {formatCurrency(quotation.gst_amount || 0)}
-            </p>
-          </Card>
-          <Card className="p-4 bg-primary/5 border-primary/20 rounded-xl">
-            <p className="text-xs text-muted-foreground">Final Total</p>
-            <p className="text-lg font-bold text-primary">
-              {formatCurrency(quotation.final_amount || 0)}
-            </p>
-          </Card>
         </div>
 
         {/* Main Content */}
@@ -1240,30 +1451,6 @@ export default function QuotationEdit() {
                   </div>
                 )}
               </div>
-            </Card>
-
-            {/* Package Details - READ ONLY */}
-            <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Package className="w-4 h-4 text-gold" />
-                Package Details <Badge variant="secondary" className="text-[10px]">Read Only</Badge>
-              </h3>
-              {quotation.package_name ? (
-                <div>
-                  <p className="font-semibold text-foreground">
-                    {quotation.package_name}
-                  </p>
-                  {quotation.package_details && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {quotation.package_details}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">
-                  No package selected (custom)
-                </p>
-              )}
             </Card>
 
             {/* Room-wise Breakdown with Drag & Drop */}
@@ -1330,6 +1517,11 @@ export default function QuotationEdit() {
                           }
                           formatCurrency={formatCurrency}
                           getQtyTypeLabel={getQtyTypeLabel}
+                          showWorkOrders={["Work In Progress", "Work Completed", "Work Stop Due To Payment"].includes(quotation.status || "")}
+                          onOpenWorkOrder={(product) => {
+                            setWorkOrderProduct(product);
+                            setWorkOrderManagerOpen(true);
+                          }}
                         />
                       ))}
                     </div>
@@ -1338,57 +1530,12 @@ export default function QuotationEdit() {
               )}
             </Card>
 
-            {/* Special Instructions - Editable */}
-            <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
-              <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-muted-foreground" />
-                Special Instructions
-              </h3>
-              <Textarea
-                value={quotation.remark || ""}
-                onChange={(e) => {
-                  setQuotation({ ...quotation, remark: e.target.value });
-                }}
-                placeholder="Add special instructions..."
-                rows={3}
-                className="rounded-xl"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 gap-1"
-                onClick={async () => {
-                  if (!quotation) return;
-                  setSaving(true);
-                  try {
-                    const res = await quotationService.updateQuotationRemark({
-                      quotation_id: quotation.quotation_id,
-                      remark: quotation.remark || "",
-                      company_id: getCompanyId(),
-                    });
-                    if (res.status === "success") {
-                      toast({ title: "Success", description: "Instructions updated" });
-                    } else {
-                      toast({ title: "Error", description: res.message, variant: "destructive" });
-                    }
-                  } catch (e: any) {
-                    toast({ title: "Error", description: "Failed to update", variant: "destructive" });
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-                disabled={saving}
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                Save Instructions
-              </Button>
-            </Card>
           </div>
 
           {/* Right Column */}
           <div className="space-y-6">
             {/* Summary */}
-            <Card className="p-5 bg-card border-border shadow-soft rounded-2xl sticky top-24">
+            <Card className="p-5 bg-card border-border shadow-soft rounded-2xl">
               <h3 className="font-semibold text-foreground text-lg mb-4 flex items-center gap-2">
                 <IndianRupee className="w-4 h-4 text-primary" />
                 Summary
@@ -1436,7 +1583,7 @@ export default function QuotationEdit() {
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-border space-y-1.5 text-xs text-muted-foreground">
+              <div className="mt-4 pt-4 border-t border-border space-y-2 text-xs text-muted-foreground">
                 <div className="flex justify-between">
                   <span>Quotation ID</span>
                   <span className="font-mono">{quotation.quotation_number}</span>
@@ -1449,6 +1596,65 @@ export default function QuotationEdit() {
                   <span>Created By</span>
                   <span>{quotation.generated_by_name || "—"}</span>
                 </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-border space-y-2">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <Package className="w-4 h-4 text-gold" />
+                  Package Details
+                </h4>
+                <div className="text-sm">
+                  <p className="text-xs text-muted-foreground">Package Name</p>
+                  <p className="font-medium">{quotation.package_name || "Custom package"}</p>
+                  {quotation.package_details && (
+                    <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                      {quotation.package_details}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-border space-y-2">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                  Special Instructions
+                </h4>
+                <Textarea
+                  value={quotation.remark || ""}
+                  onChange={(e) => setQuotation({ ...quotation, remark: e.target.value })}
+                  placeholder="Add special instructions..."
+                  rows={4}
+                  className="rounded-xl"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1"
+                  onClick={async () => {
+                    if (!quotation) return;
+                    setSaving(true);
+                    try {
+                      const res = await quotationService.updateQuotationRemark({
+                        quotation_id: quotation.quotation_id,
+                        remark: quotation.remark || "",
+                        company_id: getCompanyId(),
+                      });
+                      if (res.status === "success") {
+                        toast({ title: "Success", description: "Instructions updated" });
+                      } else {
+                        toast({ title: "Error", description: res.message, variant: "destructive" });
+                      }
+                    } catch (e: any) {
+                      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Save Instructions
+                </Button>
               </div>
             </Card>
 
@@ -1504,6 +1710,29 @@ export default function QuotationEdit() {
       </div>
 
       {/* ─── Dialogs ────────────────────────────────────────────────────── */}
+      <WorkOrderManager
+        open={workOrderManagerOpen}
+        onOpenChange={(open) => {
+          setWorkOrderManagerOpen(open);
+          if (!open) setWorkOrderProduct(null);
+        }}
+        initialProduct={workOrderProduct}
+        companyId={getCompanyId()}
+        employeeId={getEmployeeId()}
+        quotationNumber={quotation.quotation_number}
+        rooms={roomOrder}
+        onProductUpdated={(updatedProduct) => {
+          const updateRooms = (rooms: any[]) => rooms.map((room) => ({
+            ...room,
+            items: (room.items || []).map((item: any) =>
+              String(item.qp_id) === String(updatedProduct.qp_id) ? updatedProduct : item,
+            ),
+          }));
+          setRoomOrder((current) => updateRooms(current));
+          setQuotation((current) => current ? { ...current, rooms: updateRooms(current.rooms || []) } : current);
+        }}
+      />
+
       {/* Status Update Dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent className="sm:max-w-md rounded-2xl">
@@ -1529,6 +1758,13 @@ export default function QuotationEdit() {
                 </SelectContent>
               </Select>
             </div>
+            {selectedStatus === "Work In Progress" && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="font-semibold">Customer wallet update</p>
+                <p className="mt-1">This will post <strong>{formatCurrency(Number(quotation.final_amount) || 0)}</strong> for {quotation.client_name || "this customer"} to the customer transaction ledger and increase their wallet.</p>
+                <p className="mt-1 text-xs opacity-80">If this quotation was already posted, only the remaining difference will be added. It will not be charged twice. A transaction remark will include the quotation number and status.</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="remark">Remark (optional)</Label>
               <Textarea
@@ -1560,7 +1796,7 @@ export default function QuotationEdit() {
                   <Loader2 className="w-4 h-4 animate-spin" /> Updating...
                 </>
               ) : (
-                "Update Status"
+                selectedStatus === "Work In Progress" ? "Confirm & Update Status" : "Update Status"
               )}
             </Button>
           </DialogFooter>
@@ -1953,9 +2189,28 @@ export default function QuotationEdit() {
         </DialogContent>
       </Dialog>
 
+      {/* Room-wise bulk prices and quotation totals */}
+      <Dialog open={bulkPriceOpen} onOpenChange={(open) => !saving && setBulkPriceOpen(open)}>
+        <DialogContent className="max-h-[92dvh] max-w-6xl overflow-y-auto rounded-2xl">
+          <DialogHeader><DialogTitle>Change Bulk Price</DialogTitle><DialogDescription>Review product prices room by room, then apply quotation discount and GST. Product quantity types and measured quantities stay visible for reference.</DialogDescription></DialogHeader>
+          <div className="space-y-5">
+            <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" size="sm" onClick={() => { setBulkPriceOpen(false); void fetchAvailableRooms(); setAddRoomDialogOpen(true); }}><Plus className="mr-1 h-4 w-4" />Add Room</Button></div>
+            {roomOrder.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">This quotation has no rooms yet. Add a room to begin.</Card> : roomOrder.map((room: any) => <section key={room.qr_id} className="overflow-hidden rounded-xl border">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3"><h3 className="font-semibold">{room.room_name || "Room"}</h3><Button type="button" size="sm" variant="outline" onClick={() => { setBulkPriceOpen(false); openAddProductDialog(String(room.qr_id)); }}><Plus className="mr-1 h-4 w-4" />Add Product</Button></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[1040px] text-sm"><thead><tr className="border-b text-left text-xs text-muted-foreground">{["Product Title", "Qty Type", "Unit", "Quantity", "Unit Price (₹)", "Total", ""].map(title => <th key={title} className="px-3 py-2.5 font-medium">{title}</th>)}</tr></thead><tbody className="divide-y">{(room.items || []).filter((item: any) => !bulkDeletedItemIds.includes(String(item.qp_id))).map((item: any) => { const key = String(item.qp_id); const edit = bulkItemEdits[key] || {}; const merged = { ...item, ...edit, qty: Number(edit.qty ?? item.qty ?? item.quantity ?? 1) }; const unitPrice = Number(bulkUnitPrices[key] ?? item.unit_price) || 0; const total = calculateItemTotal({ ...merged, unit_price: unitPrice }); const currentUnit = merged.dimension_unit || "feet"; const unitOptions = Array.from(new Set(["feet", "inch", currentUnit])); return <tr key={item.qp_id}><td className="px-3 py-3 font-medium">{item.product_name || item.name || "Product"}</td><td className="w-40 px-2 py-2"><Select value={merged.qty_type || "Fixed"} onValueChange={value => setBulkItemEdits(current => ({ ...current, [key]: { ...current[key], qty_type: value } }))}><SelectTrigger aria-label={`${item.product_name || item.name} quantity type`} className="h-9"><SelectValue /></SelectTrigger><SelectContent>{["Fixed", "ByHW", "ByHWD", "ByHWL"].map(value => <SelectItem key={value} value={value}>{getQtyTypeLabel(value)}</SelectItem>)}</SelectContent></Select></td><td className="w-32 px-2 py-2"><Select value={currentUnit} onValueChange={value => setBulkItemEdits(current => ({ ...current, [key]: { ...current[key], dimension_unit: value } }))}><SelectTrigger aria-label={`${item.product_name || item.name} unit`} className="h-9"><SelectValue /></SelectTrigger><SelectContent>{unitOptions.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></td><td className="w-28 px-2 py-2"><Input aria-label={`${item.product_name || item.name} quantity`} type="number" min="0.001" step="0.001" value={merged.qty} onChange={e => setBulkItemEdits(current => ({ ...current, [key]: { ...current[key], qty: e.target.value } }))} /></td><td className="w-40 px-2 py-2"><Input aria-label={`${item.product_name || item.name} unit price`} type="number" min="0" step="0.01" value={bulkUnitPrices[key] ?? String(item.unit_price || 0)} onChange={e => setBulkUnitPrices(current => ({ ...current, [key]: e.target.value }))} /></td><td className="px-3 py-3 font-semibold">{formatCurrency(total)}</td><td className="px-2 py-2"><Button type="button" size="icon" variant="ghost" aria-label={`Remove ${item.product_name || item.name}`} onClick={() => setBulkDeletedItemIds(current => [...current, key])}><Trash2 className="h-4 w-4 text-destructive" /></Button></td></tr>; })}{!(room.items || []).some((item: any) => !bulkDeletedItemIds.includes(String(item.qp_id))) && <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No products in this room.</td></tr>}</tbody></table></div>
+            </section>)}
+
+            <section className="grid gap-5 rounded-xl border p-4 lg:grid-cols-2"><div className="space-y-4"><div><h3 className="font-semibold">Discount & GST</h3><p className="text-sm text-muted-foreground">Update discount and GST for this quotation.</p></div><div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1.5"><Label>Discount Type</Label><Select value={discountType} onValueChange={v => setDiscountType(v as "Percent" | "INR")}><SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INR">Fixed Amount (₹)</SelectItem><SelectItem value="Percent">Percentage (%)</SelectItem></SelectContent></Select></div><div className="space-y-1.5"><Label>{discountType === "Percent" ? "Discount Percentage (%)" : "Discount Amount (₹)"}</Label><Input aria-label="Discount amount" type="number" min="0" max={discountType === "Percent" ? 100 : undefined} step="0.01" value={discountValue} onChange={e => setDiscountValue(Number(e.target.value) || 0)} /></div><div className="space-y-1.5"><Label>GST Percentage (%)</Label><Input aria-label="GST percentage" type="number" min="0" max="100" step="0.01" value={gstPercent} onChange={e => setGstPercent(Number(e.target.value) || 0)} /></div><label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={isGstApplicable} onChange={e => setIsGstApplicable(e.target.checked)} className="h-4 w-4 rounded border-border text-primary" />GST Applicable</label></div></div>
+              <div className="space-y-2 rounded-xl bg-muted/40 p-4 text-sm"><h3 className="mb-3 font-semibold">Summary</h3><div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><b>{formatCurrency(bulkSubtotal)}</b></div><div className="flex justify-between"><span className="text-muted-foreground">Discount</span><b>- {formatCurrency(bulkDiscountAmount)}</b></div><div className="flex justify-between"><span className="text-muted-foreground">After Discount</span><b>{formatCurrency(bulkAfterDiscount)}</b></div><div className="flex justify-between"><span className="text-muted-foreground">GST ({isGstApplicable ? `${Number(gstPercent).toFixed(2)}%` : "Not applicable"})</span><b>{formatCurrency(bulkGstAmount)}</b></div><div className="mt-2 flex justify-between border-t pt-3 text-base"><span className="font-semibold">Total</span><b>{formatCurrency(bulkFinalAmount)}</b></div></div>
+            </section>
+          </div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setBulkPriceOpen(false)} disabled={saving}>Cancel</Button><Button type="button" onClick={() => void saveBulkPricing()} disabled={saving || !roomOrder.length}>{saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : <><Save className="mr-2 h-4 w-4" />Save Prices & Totals</>}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add Product Dialog */}
       <Dialog open={addProductDialogOpen} onOpenChange={setAddProductDialogOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
+        <DialogContent className="sm:max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add Product</DialogTitle>
             <DialogDescription>
@@ -1964,7 +2219,7 @@ export default function QuotationEdit() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Product</Label>
+              <div className="flex items-center justify-between gap-2"><Label>Product</Label><Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => void openQuickAddProductDialog()}><Sparkles className="h-3.5 w-3.5" />Add New Product</Button></div>
               <SearchableSelect
                 options={getAvailableProducts(selectedRoomForProduct).map((p) => ({
                   value: p.product_id || "",
@@ -2029,6 +2284,25 @@ export default function QuotationEdit() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add New Product to product master and this quotation room */}
+      <Dialog open={quickAddProductOpen} onOpenChange={(open) => !quickAddProductSaving && setQuickAddProductOpen(open)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-xl">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" />Add New Product</DialogTitle><DialogDescription>This creates a new product in your product master and adds it to the selected quotation room right away.</DialogDescription></DialogHeader>
+          <form className="space-y-4" onSubmit={handleQuickAddProduct}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2"><Label>Product Name *</Label><Input required autoFocus value={quickProduct.product_name} onChange={e => setQuickProduct(v => ({ ...v, product_name: e.target.value }))} placeholder="e.g. Premium Wood Table" /></div>
+              <div className="space-y-1.5"><Label>Category *</Label><SearchableSelect options={productCategories.map(c => ({ value: String(c.category_id || ""), label: c.category_name }))} value={quickProduct.category_id} onChange={value => setQuickProduct(v => ({ ...v, category_id: value }))} placeholder="Select category" /></div>
+              <div className="space-y-1.5"><Label>Quantity Type</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={quickProduct.qty_type} onChange={e => setQuickProduct(v => ({ ...v, qty_type: e.target.value }))}><option value="Fixed">Fixed</option><option value="ByHW">By Height × Width</option><option value="ByHWD">By Height × Width × Depth</option><option value="ByHWL">By Height × Width × Length</option></select></div>
+              {quickProduct.qty_type !== "Fixed" && <div className="space-y-2 rounded-xl border border-dashed bg-muted/20 p-3 sm:col-span-2"><div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Ruler className="h-3.5 w-3.5 text-primary" />Dimensions</div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["height", "Height"], ["width", "Width"], ...(quickProduct.qty_type === "ByHWD" ? [["depth", "Depth"]] : []), ...(quickProduct.qty_type === "ByHWL" ? [["length", "Length"]] : [])].map(([key, label]) => <div key={key} className="space-y-1"><Label className="text-xs">{label}</Label><Input type="number" min="0" step="0.1" value={(quickProduct as any)[key]} onChange={e => setQuickProduct(v => ({ ...v, [key]: Number(e.target.value) }))} /></div>)}</div><div className="space-y-1"><Label className="text-xs">Dimension Unit</Label><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={quickProduct.dimension_unit_id} onChange={e => setQuickProduct(v => ({ ...v, dimension_unit_id: e.target.value }))}><option value="">Select unit</option>{productUnits.map(unit => <option key={unit.unit_id} value={unit.unit_id}>{unit.unit_name}</option>)}</select></div></div>}
+              <div className="space-y-1.5"><Label>Unit Price (₹) *</Label><Input required type="number" min="0.01" step="0.01" value={quickProduct.price || ""} onChange={e => setQuickProduct(v => ({ ...v, price: Number(e.target.value) }))} /></div>
+              <div className="space-y-1.5"><Label>GST Percentage (%)</Label><Input type="number" min="0" max="100" step="0.1" value={quickProduct.gst_percent} onChange={e => setQuickProduct(v => ({ ...v, gst_percent: Number(e.target.value) }))} /></div>
+              <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Textarea rows={2} value={quickProduct.description} onChange={e => setQuickProduct(v => ({ ...v, description: e.target.value }))} /></div>
+            </div>
+            <DialogFooter><Button type="button" variant="outline" onClick={() => setQuickAddProductOpen(false)} disabled={quickAddProductSaving}>Cancel</Button><Button type="submit" disabled={quickAddProductSaving}>{quickAddProductSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating & adding…</> : <><Plus className="mr-2 h-4 w-4" />Create & Add to Room</>}</Button></DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

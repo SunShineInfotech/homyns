@@ -34,11 +34,15 @@ import {
   Calendar,
   Repeat,
   ArrowRightLeft,
+  ShoppingCart,
+  Cuboid,
+  Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
+import { QUOTATION_STATUSES } from "@/services/quotation-status.service";
 
 // Define all nav items with their permission keys
 const ALL_NAV_ITEMS = [
@@ -49,28 +53,45 @@ const ALL_NAV_ITEMS = [
     permission: "dashboard",
   },
   {
-    icon: FilePlus,
-    label: "Create Quotation",
-    path: "/create-quotation",
-    permission: "create-quotation",
+    icon: FileText,
+    label: "Quotation",
+    path: "#",
+    permission: "quotations",
+    isParent: true,
+    children: [
+      { icon: FilePlus, label: "Create Quotation", path: "/create-quotation?new=1", permission: "create-quotation" },
+      { icon: Cuboid, label: "Create 3D Quotation", path: "/create-3d-quotation", permission: "create-3d-quotation" },
+      { icon: ShoppingCart, label: "My Quotation Cart", path: "/quotation-cart", permission: "quotation-cart" },
+    ],
   },
   {
     icon: FileText,
     label: "Quotation History",
-    path: "/quotations",
+    path: "#",
     permission: "quotations",
+    isParent: true,
+    children: [
+      { icon: FileText, label: "All Quotations", path: "/quotations?view=all", permission: "quotations" },
+
+      ...QUOTATION_STATUSES.map((status) => ({
+        icon: FileText,
+        label: status,
+        path: `/quotations?status=${encodeURIComponent(status)}`,
+        permission: "quotations",
+      })),
+    ],
   },
   {
     icon: Users,
-    label: "Clients",
-    path: "/clients",
-    permission: "clients",
-  },
-  {
-    icon: Users,
-    label: "Employees",
-    path: "/employees",
-    permission: "employees",
+    label: "Users",
+    path: "#",
+    permission: "users",
+    isParent: true,
+    children: [
+      { icon: Users, label: "Employees", path: "/employees", permission: "employees" },
+      { icon: Users, label: "Clients", path: "/clients", permission: "clients" },
+      { icon: Truck, label: "Vendors", path: "/vendors", permission: "vendors" },
+    ],
   },
   {
     icon: UserPlus,
@@ -91,6 +112,19 @@ const ALL_NAV_ITEMS = [
         path: "/all-leads",
         permission: "all-leads",
       }
+    ],
+  },
+  {
+    icon: Calendar,
+    label: "Attendance",
+    path: "#",
+    permission: "attendance",
+    isParent: true,
+    children: [
+      { icon: Calendar, label: "My Attendance", path: "/attendance/my", permission: "attendance-my" },
+      { icon: Users, label: "All Attendance", path: "/attendance/all", permission: "attendance-all" },
+      { icon: ClipboardList, label: "Attendance Sheet", path: "/attendance/sheet", permission: "attendance-sheet" },
+      { icon: BarChart3, label: "Attendance Report", path: "/attendance/report", permission: "attendance-report" },
     ],
   },
   {
@@ -199,6 +233,39 @@ const ALL_NAV_ITEMS = [
         path: "/terms",
         permission: "terms",
       },
+      { icon: Building2, label: "Accounts", path: "/finance/accounts", permission: "accounts" },
+      { icon: Tag, label: "Expense Categories", path: "/finance/expense-categories", permission: "expense-categories" },
+    ],
+  },
+  {
+    icon: Package,
+    label: "Stock",
+    path: "#",
+    permission: "stock",
+    isParent: true,
+    children: [
+      { icon: ShoppingCart, label: "Purchase Orders", path: "/purchase-orders", permission: "purchases" },
+      { icon: FileText, label: "Purchase", path: "/purchase", permission: "purchases" },
+      { icon: FileText, label: "Purchase Payments", path: "/purchase-payments", permission: "purchase-payments" },
+      { icon: Building2, label: "Warehouses & Decks", path: "/stock/warehouses", permission: "stock-warehouses" },
+      { icon: Package, label: "Stock IN", path: "/stock/in", permission: "stock-in" },
+      { icon: Package, label: "Stock OUT", path: "/stock/out", permission: "stock-out" },
+      { icon: ArrowRightLeft, label: "Stock Transfer", path: "/stock/transfer", permission: "stock-transfer" },
+      { icon: ClipboardList, label: "Stock Ledger", path: "/stock/ledger", permission: "stock-ledger" },
+      { icon: Layers, label: "All Stock", path: "/stock/all", permission: "stock-all" },
+    ],
+  },
+  {
+    icon: ArrowRightLeft,
+    label: "Transactions",
+    path: "#",
+    permission: "transactions",
+    isParent: true,
+    children: [
+      { icon: ArrowRightLeft, label: "Account Transfer", path: "/finance/account-transfer", permission: "account-transfer" },
+      { icon: FileText, label: "All Transactions", path: "/finance/transaction-reports", permission: "transaction-reports" },
+      { icon: FileText, label: "Other Income", path: "/finance/income", permission: "other-income" },
+      { icon: FileText, label: "Other Expense", path: "/finance/expenses", permission: "other-expense" },
     ],
   },
   {
@@ -247,6 +314,12 @@ const ALL_NAV_ITEMS = [
         path: "/reports/work-order-status",
         permission: "reports-work-order",
       },
+      {
+        icon: FileText,
+        label: "Transaction Report",
+        path: "/reports/transactions",
+        permission: "transaction-reports",
+      },
     ],
   },
   {
@@ -263,7 +336,7 @@ const ALL_NAV_ITEMS = [
   },
 ];
 
-const API_URL = import.meta.env.VITE_API_URL || "https://sunshineproduct.in/interior_designer/v1_api/";
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 // Helper function to safely get permissions array
 const getPermissionsArray = (accessPages: any): string[] => {
@@ -280,15 +353,33 @@ export function Sidebar() {
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [navItems, setNavItems] = useState<any[]>([]);
-  const [companyName, setCompanyName] = useState("Homyns");
+  const [companyName, setCompanyName] = useState("");
   const [companyLogo, setCompanyLogo] = useState("");
   const [userName, setUserName] = useState("");
   const [userLoginCode, setUserLoginCode] = useState("");
   const [userStatus, setUserStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  const isNavTargetActive = (target: string) => {
+    const [targetPath, targetQuery = ""] = target.split("?");
+    if (location.pathname !== targetPath && !location.pathname.startsWith(`${targetPath}/`)) return false;
+    const expectedQuery = new URLSearchParams(targetQuery);
+    const currentQuery = new URLSearchParams(location.search);
+    for (const [key, value] of expectedQuery) {
+      if (currentQuery.get(key) !== value) return false;
+    }
+    // The quotation list has distinct All and status-filtered child links.
+    // Keep All active only for its own view (or an unfiltered quotation list).
+    if (targetPath === "/quotations" && !expectedQuery.has("status")) {
+      if (expectedQuery.has("view")) return currentQuery.get("view") === expectedQuery.get("view") && !currentQuery.has("status");
+      return !currentQuery.has("status") && !currentQuery.has("view");
+    }
+    return true;
+  };
+
   // Check user status and permissions
-  const checkUserStatus = async () => {
+  const checkUserStatus = async (showLoading = false) => {
+    if (showLoading) setIsLoading(true);
     try {
       const userDataStr = localStorage.getItem("user_data");
       if (!userDataStr) return;
@@ -325,7 +416,7 @@ export function Sidebar() {
             access_pages: currentUser.access_pages || "",
           };
           localStorage.setItem("user_data", JSON.stringify(updatedUserData));
-          
+
           setUserStatus(currentUser.status);
           const perms = getPermissionsArray(currentUser.access_pages);
           setUserPermissions(perms);
@@ -334,13 +425,14 @@ export function Sidebar() {
     } catch (error) {
       console.error("Error checking user status:", error);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
   // Load user data and permissions
   useEffect(() => {
     const loadUserData = () => {
+      let hasCachedPermissions = false;
       try {
         const userDataStr = localStorage.getItem("user_data");
         if (userDataStr) {
@@ -348,24 +440,30 @@ export function Sidebar() {
           setUserName(userData.name || "");
           setUserLoginCode(userData.login_code || "");
           setUserStatus(userData.status || "Active");
-          
+
           const perms = getPermissionsArray(userData.access_pages);
           setUserPermissions(perms);
+          hasCachedPermissions = perms.length > 0;
         } else {
           setUserPermissions([]);
         }
       } catch (error) {
         console.error("Error loading user data:", error);
         setUserPermissions([]);
-      } finally {
+      }
+      if (hasCachedPermissions) {
         setIsLoading(false);
       }
+      // Refresh status/access immediately after login or page load. Keep the
+      // loading state until the server responds only when there are no cached
+      // permissions, so an empty cache is not shown as a real denial.
+      void checkUserStatus(!hasCachedPermissions);
     };
 
     loadUserData();
 
     const interval = setInterval(checkUserStatus, 30000);
-    
+
     const handleFocus = () => {
       checkUserStatus();
     };
@@ -377,17 +475,18 @@ export function Sidebar() {
     };
   }, []);
 
+  const hasPermission = (permission: string) => userPermissions.includes(permission)
+    || ((permission === "create-3d-quotation" || permission === "quotation-cart") && userPermissions.includes("create-quotation"));
+
   // Filter nav items based on permissions
   useEffect(() => {
     const filterNavItems = (items: any[]): any[] => {
       const filtered: any[] = [];
 
       for (const item of items) {
-        const hasPermission = userPermissions.includes(item.permission);
-
         if (item.isParent && item.children) {
           const filteredChildren = item.children.filter((child: any) => 
-            userPermissions.includes(child.permission)
+            hasPermission(child.permission)
           );
 
           if (filteredChildren.length > 0) {
@@ -396,7 +495,7 @@ export function Sidebar() {
               children: filteredChildren,
             });
           }
-        } else if (hasPermission) {
+        } else if (hasPermission(item.permission)) {
           filtered.push(item);
         }
       }
@@ -428,14 +527,10 @@ export function Sidebar() {
 
   // Auto-expand menus based on current route
   useEffect(() => {
-    const currentPath = location.pathname;
-
     navItems.forEach((item) => {
       if (item.isParent && item.children) {
         const hasActiveChild = item.children.some(
-          (child: any) =>
-            currentPath === child.path ||
-            currentPath.startsWith(child.path + "/"),
+          (child: any) => isNavTargetActive(child.path),
         );
 
         if (hasActiveChild) {
@@ -448,7 +543,7 @@ export function Sidebar() {
         }
       }
     });
-  }, [location.pathname, navItems]);
+  }, [location.pathname, location.search, navItems]);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus((prev) =>
@@ -459,11 +554,7 @@ export function Sidebar() {
   };
 
   const isChildActive = (children: any[]) => {
-    const currentPath = location.pathname;
-    return children.some(
-      (child) =>
-        currentPath === child.path || currentPath.startsWith(child.path + "/"),
-    );
+    return children.some((child) => isNavTargetActive(child.path));
   };
 
   const handleLogout = () => {
@@ -492,7 +583,7 @@ export function Sidebar() {
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="text-sidebar-foreground font-display font-semibold text-lg leading-tight">
-                  {companyName || "Homyns"}
+                  {companyName || ""}
                 </span>
                 <span className="text-sidebar-muted text-[11px] uppercase tracking-wider">
                   CRM & Quotation
@@ -530,7 +621,7 @@ export function Sidebar() {
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="text-sidebar-foreground font-display font-semibold text-lg leading-tight">
-                  {companyName || "Homyns"}
+                  {companyName || ""}
                 </span>
                 <span className="text-sidebar-muted text-[11px] uppercase tracking-wider">
                   CRM & Quotation
@@ -588,7 +679,7 @@ export function Sidebar() {
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="text-sidebar-foreground font-display font-semibold text-lg leading-tight">
-                  {companyName || "Homyns"}
+                  {companyName || ""}
                 </span>
                 <span className="text-sidebar-muted text-[11px] uppercase tracking-wider">
                   CRM & Quotation
@@ -678,7 +769,7 @@ export function Sidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sidebar-foreground font-display font-semibold text-lg leading-tight">
-                {companyName || "Homyns"}
+                {companyName || ""}
               </span>
               <span className="text-sidebar-muted text-[11px] uppercase tracking-wider">
                 CRM & Quotation
@@ -723,19 +814,17 @@ export function Sidebar() {
                 {!collapsed && isExpanded && (
                   <div className="ml-9 space-y-1 border-l-2 border-white/10 pl-2">
                     {item.children.map((child: any) => {
-                      const isActive =
-                        location.pathname === child.path ||
-                        location.pathname.startsWith(child.path + "/");
+                      const isActive = isNavTargetActive(child.path);
 
                       return (
                         <NavLink
                           key={child.path}
                           to={child.path}
                           end={child.path === "/"}
-                          className={({ isActive: navIsActive }) =>
+                          className={() =>
                             cn(
                               "flex items-center gap-3 px-3 py-2 rounded-lg transition-all group",
-                              isActive || navIsActive
+                              isActive
                                 ? "bg-white/10 text-white shadow-md font-semibold"
                                 : "text-sidebar-foreground/75 hover:bg-sidebar-hover hover:text-white",
                             )

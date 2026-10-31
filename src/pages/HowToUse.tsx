@@ -199,6 +199,14 @@ const contentData: Record<Language, HowToUseData> = {
           {
             title: "Generate Quotation",
             description: "Click 'Generate Quotation' to create a professional quotation document with all details, pricing, and terms."
+          },
+          {
+            title: "Save and resume a draft",
+            description: "After choosing a customer, your quotation is saved automatically as you work. You can leave the page and find the draft under My Quotation Cart, grouped by customer."
+          },
+          {
+            title: "Continue or discard a draft",
+            description: "Open a draft to review its rooms and products. Choose Continue Quotation to resume from where you left off, or Discard Draft to remove it. Creating the final quotation converts the draft into a quotation."
           }
         ]
       },
@@ -222,6 +230,18 @@ const contentData: Record<Language, HowToUseData> = {
           {
             title: "Convert to Project",
             description: "Approved quotations can be converted into projects for execution and tracking."
+          },
+          {
+            title: "Start product work orders",
+            description: "Change the quotation status to Work In Progress, Work Completed, or Work Stop Due To Payment to show work-order details for each product. Assign an employee, set priority, and track dates."
+          },
+          {
+            title: "Track product production status",
+            description: "Each product moves through Pending, Work Started, Waiting for Client Response, Product Ready, and Product Set In Place. Add remarks or images to its history to keep the team updated."
+          },
+          {
+            title: "Understand priorities",
+            description: "Set each product's priority to Low, Normal, High, or Urgent. Use the product's status history to review previous updates, remarks, images, and timestamps."
           }
         ]
       },
@@ -393,6 +413,14 @@ const contentData: Record<Language, HowToUseData> = {
           {
             title: "ક્વોટેશન જનરેટ કરો",
             description: "તમામ વિગતો, કિંમત અને શરતો સાથે વ્યાવસાયિક ક્વોટેશન દસ્તાવેજ બનાવવા માટે 'ક્વોટેશન જનરેટ કરો' ક્લિક કરો."
+          },
+          {
+            title: "ડ્રાફ્ટ સાચવો અને ફરી ચાલુ કરો",
+            description: "ગ્રાહક પસંદ કર્યા પછી ક્વોટેશન કામ કરતી વખતે આપમેળે સાચવાય છે. પેજ છોડ્યા પછી My Quotation Cart માં ગ્રાહક પ્રમાણે ડ્રાફ્ટ શોધો."
+          },
+          {
+            title: "ડ્રાફ્ટ ચાલુ રાખો અથવા કાઢી નાખો",
+            description: "રૂમ અને ઉત્પાદનો જોવા માટે ડ્રાફ્ટ ખોલો. જ્યાંથી કામ છોડ્યું હતું ત્યાંથી ચાલુ કરવા Continue Quotation પસંદ કરો અથવા ડ્રાફ્ટ દૂર કરવા Discard Draft પસંદ કરો. અંતિમ ક્વોટેશન બનાવવાથી ડ્રાફ્ટ ક્વોટેશનમાં ફેરવાય છે."
           }
         ]
       },
@@ -416,6 +444,18 @@ const contentData: Record<Language, HowToUseData> = {
           {
             title: "પ્રોજેક્ટમાં કન્વર્ટ કરો",
             description: "મંજૂર ક્વોટેશનને અમલ અને ટ્રૅકિંગ માટે પ્રોજેક્ટ્સમાં કન્વર્ટ કરી શકાય છે."
+          },
+          {
+            title: "ઉત્પાદન વર્ક ઓર્ડર શરૂ કરો",
+            description: "દરેક ઉત્પાદન માટે વર્ક ઓર્ડર વિગતો બતાવવા ક્વોટેશન સ્થિતિ Work In Progress, Work Completed અથવા Work Stop Due To Payment કરો. કર્મચારી સોંપો, પ્રાથમિકતા અને તારીખો સેટ કરો."
+          },
+          {
+            title: "ઉત્પાદન સ્થિતિ ટ્રૅક કરો",
+            description: "ઉત્પાદન Pending, Work Started, Waiting for Client Response, Product Ready અને Product Set In Place સ્થિતિમાંથી આગળ વધે છે. ટીમને અપડેટ રાખવા ઇતિહાસમાં નોંધ અથવા છબી ઉમેરો."
+          },
+          {
+            title: "પ્રાથમિકતા અને ઇતિહાસ જુઓ",
+            description: "દરેક ઉત્પાદન માટે Low, Normal, High અથવા Urgent પ્રાથમિકતા પસંદ કરો. અગાઉના અપડેટ, નોંધ, છબી અને સમય જોવા સ્થિતિ ઇતિહાસ ખોલો."
           }
         ]
       },
@@ -587,6 +627,14 @@ const contentData: Record<Language, HowToUseData> = {
           {
             title: "कोटेशन जनरेट करें",
             description: "सभी विवरण, मूल्य निर्धारण और शर्तों के साथ एक पेशेवर कोटेशन दस्तावेज़ बनाने के लिए 'कोटेशन जनरेट करें' पर क्लिक करें।"
+          },
+          {
+            title: "ड्राफ्ट सेव करें और बाद में जारी रखें",
+            description: "ग्राहक चुनने के बाद काम करते समय कोटेशन अपने आप सेव होता है। पेज छोड़ने पर My Quotation Cart में ग्राहक के अनुसार ड्राफ्ट मिलेगा।"
+          },
+          {
+            title: "ड्राफ्ट जारी रखें या हटाएँ",
+            description: "कमरे और उत्पाद देखने के लिए ड्राफ्ट खोलें। जहाँ काम छोड़ा था वहीं से जारी रखने के लिए Continue Quotation चुनें या हटाने के लिए Discard Draft चुनें। अंतिम कोटेशन बनाने पर ड्राफ्ट कोटेशन में बदल जाता है।"
           }
         ]
       },
@@ -610,6 +658,18 @@ const contentData: Record<Language, HowToUseData> = {
           {
             title: "प्रोजेक्ट में बदलें",
             description: "अनुमोदित कोटेशन को निष्पादन और ट्रैकिंग के लिए प्रोजेक्ट्स में बदला जा सकता है।"
+          },
+          {
+            title: "उत्पाद वर्क ऑर्डर शुरू करें",
+            description: "हर उत्पाद का वर्क ऑर्डर दिखाने के लिए कोटेशन की स्थिति Work In Progress, Work Completed या Work Stop Due To Payment करें। कर्मचारी असाइन करें और प्राथमिकता व तारीखें तय करें।"
+          },
+          {
+            title: "उत्पादन स्थिति ट्रैक करें",
+            description: "उत्पाद Pending, Work Started, Waiting for Client Response, Product Ready और Product Set In Place स्थितियों से आगे बढ़ता है। टीम को अपडेट रखने के लिए इतिहास में टिप्पणी या तस्वीर जोड़ें।"
+          },
+          {
+            title: "प्राथमिकता और इतिहास देखें",
+            description: "हर उत्पाद के लिए Low, Normal, High या Urgent प्राथमिकता चुनें। पुराने अपडेट, टिप्पणी, तस्वीर और समय देखने के लिए स्थिति इतिहास खोलें।"
           }
         ]
       },

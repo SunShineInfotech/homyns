@@ -21,7 +21,7 @@ import { companyService, Company } from "@/services/company.service";
 import { 
   Plus, Search, Pencil, Trash2, Loader2, Building2, 
   ChevronUp, ChevronDown, ChevronsUpDown, X, 
-  Phone, Mail, MapPin, Calendar, CreditCard, Globe 
+  Phone, Mail, MapPin, Calendar, CreditCard, Globe, UserRound 
 } from "lucide-react";
 
 type SortKey = "company_name" | "company_code" | "email";
@@ -57,7 +57,7 @@ export default function CompanySettings() {
 
   const API_URL =
     import.meta.env.VITE_API_URL ||
-    "https://sunshineproduct.in/interior_designer/v1_api/";
+    "";
 
   const getCompanyId = (): string => {
     try {
@@ -168,6 +168,9 @@ export default function CompanySettings() {
       list = list.filter(
         (c) =>
           c.company_name?.toLowerCase().includes(q) ||
+          c.owner_name?.toLowerCase().includes(q) ||
+          c.owner_employee_code?.toLowerCase().includes(q) ||
+          c.employee_number?.toLowerCase().includes(q) ||
           c.company_code?.toLowerCase().includes(q) ||
           c.email?.toLowerCase().includes(q) ||
           c.phone?.includes(q),
@@ -467,6 +470,24 @@ export default function CompanySettings() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {company.owner_name && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <UserRound className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span>Owner: {company.owner_name}</span>
+                        </div>
+                      )}
+                      {company.owner_employee_code && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <UserRound className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span>Employee Code: {company.owner_employee_code}</span>
+                        </div>
+                      )}
+                      {company.employee_number && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <CreditCard className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span>Employee No.: {company.employee_number}</span>
+                        </div>
+                      )}
                       {company.email && (
                         <div className="flex items-center gap-2 text-sm">
                           <Mail className="h-4 w-4 text-muted-foreground shrink-0" />

@@ -4,6 +4,10 @@ import { BaseService, ApiResponse, apiClient } from './api.config';
 export interface Company {
   company_id?: string;
   company_name: string;
+  owner_name?: string;
+  owner_emp_id?: string;
+  owner_employee_code?: string;
+  employee_number?: string;
   company_code: string;
   address?: string;
   phone?: string;
@@ -13,6 +17,8 @@ export interface Company {
   gst_number?: string;
   logo?: string;
   website?: string;  // ← Added website field
+  text_color?: string;
+  background_color?: string;
   company_expiry_date?: string;
   is_deleted?: string;
   c_date?: string;

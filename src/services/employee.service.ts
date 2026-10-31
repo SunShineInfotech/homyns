@@ -5,6 +5,7 @@ export interface Employee {
   emp_id?: string;
   company_id?: string;
   login_code: string;
+  employee_number?: string;
   password?: string;
   name: string;
   phone1?: string;

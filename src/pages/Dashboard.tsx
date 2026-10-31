@@ -23,6 +23,7 @@ import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
 import { customerService } from "@/services/customer.service";
 import { followupService, Followup } from "@/services/followup.service";
+import { getDateInIndia, getIndiaDate } from "@/lib/india-date";
 
 const COLORS = [
   "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
@@ -35,11 +36,13 @@ const STATUS_COLORS: Record<string, string> = {
   'Pending': '#f59e0b',
   'Approved by Admin': '#3b82f6',
   'Sent to Customer': '#8b5cf6',
+  'Revision Requested': '#f59e0b',
   'Approved by Customer': '#22c55e',
+  'Rejected by Customer': '#ef4444',
   'Invoice Generated': '#8b5cf6',
-  'Work Started': '#06b6d4',
-  'On Going': '#f97316',
+  'Work In Progress': '#06b6d4',
   'Work Completed': '#10b981',
+  'Work Stop Due To Payment': '#f97316',
   'Closed': '#6b7280',
   'Rejected': '#ef4444',
 };
@@ -47,10 +50,8 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [start, setStart] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10);
-  });
-  const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [start, setStart] = useState(() => getIndiaDate(-30));
+  const [end, setEnd] = useState(() => getIndiaDate());
 
   // Dashboard data
   const [quotations, setQuotations] = useState<any[]>([]);
@@ -153,7 +154,7 @@ export default function Dashboard() {
   // Filter data by date range
   const filteredQuotations = useMemo(() => {
     return quotations.filter((q) => {
-      const date = q.c_date?.split(' ')[0] || '';
+      const date = getDateInIndia(q.c_date);
       return date >= start && date <= end;
     });
   }, [quotations, start, end]);
@@ -161,7 +162,7 @@ export default function Dashboard() {
   // Filter leads by date range
   const filteredLeads = useMemo(() => {
     return leads.filter((l) => {
-      const date = l.c_date?.split(' ')[0] || '';
+      const date = getDateInIndia(l.c_date);
       return date >= start && date <= end;
     });
   }, [leads, start, end]);
@@ -396,7 +397,7 @@ export default function Dashboard() {
                 <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="h-11 pl-10 rounded-xl" />
               </div>
             </div>
-            <Button variant="outline" onClick={() => { const d = new Date(); d.setDate(d.getDate() - 30); setStart(d.toISOString().slice(0, 10)); setEnd(new Date().toISOString().slice(0, 10)); }} className="h-11 rounded-xl">Reset</Button>
+            <Button variant="outline" onClick={() => { setStart(getIndiaDate(-30)); setEnd(getIndiaDate()); }} className="h-11 rounded-xl">Reset</Button>
           </div>
         </Card>
 

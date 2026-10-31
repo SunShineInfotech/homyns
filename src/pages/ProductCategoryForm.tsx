@@ -36,7 +36,7 @@ export default function ProductCategoryForm() {
   const [existingImage, setExistingImage] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   const getCompanyId = (): string => {
     try {

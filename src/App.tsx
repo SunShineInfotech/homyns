@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ConfirmProvider } from "@/lib/confirm";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import CountdownGate from "./components/Countdowngate";
 
@@ -48,6 +48,7 @@ import QuotationView from "./pages/QuotationView";
 import QuotationEdit from "./pages/QuotationEdit";
 import QuotationHistory from "./pages/QuotationHistory";
 import Customers from "./pages/Customers";
+import CustomerWalletPage from "./pages/CustomerWalletPage";
 import CustomerAddresses from "./pages/CustomerAddresses";
 import ClientDetails from "./pages/ClientDetails";
 import Packages from "./pages/Packages";
@@ -55,6 +56,7 @@ import PackageForm from "./pages/PackageForm";
 import Items from "./pages/Items";
 import RawMaterials from "./pages/RawMaterials";
 import RawMaterialForm from "./pages/RawMaterialForm";
+import LowStockReport from "./pages/LowStockReport";
 import Rooms from "./pages/Rooms";
 import RoomForm from "./pages/RoomForm";
 import States from "./pages/States";
@@ -68,6 +70,15 @@ import PublicQuotationView from "./pages/PublicQuotationView";
 import NotFound from "./pages/NotFound";
 import HowToUse from "./pages/HowToUse";
 import Welcome from "./pages/Welcome";
+import QuotationCartPage from "./pages/QuotationCart";
+import QuotationCartDetail from "./pages/QuotationCartDetail";
+import { VendorsPage, VendorFormPage, VendorTransactionsPage, PurchasesPage, PurchaseReturnsPage, PurchasePaymentsPage, PaymentRemindersPage } from "./pages/VendorPurchasing";
+import PurchaseOrderPage from "./pages/PurchaseOrderPage";
+import InvoiceView from "./pages/InvoiceView";
+import { AccountTransactionReportPage, ExpenseCategoriesPage, FinanceAccountsPage, FinanceAccountTransferPage, OtherExpensesPage, OtherIncomePage, OtherExpenseFormPage, OtherIncomeFormPage, TransactionReportsPage } from "./pages/Finance";
+import { AllAttendancePage, AttendanceReportPage, AttendanceSheetPage, MyAttendancePage } from "./pages/Attendance";
+const Create3DQuotationPage = lazy(() => import("./pages/Create3DQuotation"));
+const StockModulePage = lazy(() => import("./pages/StockModulePage"));
 
 // Loading component
 const LoadingScreen = () => (
@@ -122,7 +133,7 @@ const queryClient = new QueryClient({
 
 const App = () => {
   // Get basename from environment variable
-  const basename = import.meta.env.VITE_BASE_PATH || '/interior_designer/build_v1/'
+  const basename = import.meta.env.VITE_BASE_PATH || '/interior_designer/build_v2/'
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -180,6 +191,14 @@ const App = () => {
 
               {/* Quotation Routes */}
               <Route
+                path="/quotation-cart"
+                element={<ProtectedRoute><QuotationCartPage /></ProtectedRoute>}
+              />
+              <Route
+                path="/quotation-cart/:id"
+                element={<ProtectedRoute><QuotationCartDetail /></ProtectedRoute>}
+              />
+              <Route
                 path="/quotations"
                 element={
                   <ProtectedRoute>
@@ -187,6 +206,47 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+
+              {/* Vendor and purchasing */}
+              <Route path="/create-3d-quotation" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><Create3DQuotationPage /></Suspense></ProtectedRoute>} />
+              <Route path="/create-3d-quotation/:planId" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><Create3DQuotationPage /></Suspense></ProtectedRoute>} />
+              <Route path="/vendors" element={<ProtectedRoute><VendorsPage /></ProtectedRoute>} />
+              <Route path="/vendors/new" element={<ProtectedRoute><VendorFormPage /></ProtectedRoute>} />
+              <Route path="/vendors/:vendorId/edit" element={<ProtectedRoute><VendorFormPage /></ProtectedRoute>} />
+              <Route path="/vendors/:vendorId/transactions" element={<ProtectedRoute><VendorTransactionsPage /></ProtectedRoute>} />
+              <Route path="/payment-reminders" element={<ProtectedRoute><PaymentRemindersPage /></ProtectedRoute>} />
+              <Route path="/purchase-orders" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
+              <Route path="/purchase-orders/new" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
+              <Route path="/purchase-orders/:id" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
+              <Route path="/purchase" element={<ProtectedRoute><PurchasesPage /></ProtectedRoute>} />
+              <Route path="/purchase/new" element={<ProtectedRoute><PurchasesPage /></ProtectedRoute>} />
+              <Route path="/purchase/:purchaseId/edit" element={<ProtectedRoute><PurchasesPage /></ProtectedRoute>} />
+              <Route path="/purchases" element={<Navigate to="/purchase" replace />} />
+              <Route path="/purchase-returns" element={<ProtectedRoute><PurchaseReturnsPage /></ProtectedRoute>} />
+              <Route path="/purchase-payments" element={<ProtectedRoute><PurchasePaymentsPage /></ProtectedRoute>} />
+              <Route path="/finance/expense-categories" element={<ProtectedRoute><ExpenseCategoriesPage /></ProtectedRoute>} />
+              <Route path="/finance/accounts" element={<ProtectedRoute><FinanceAccountsPage /></ProtectedRoute>} />
+              <Route path="/finance/account-transfer" element={<ProtectedRoute><FinanceAccountTransferPage /></ProtectedRoute>} />
+              <Route path="/finance/transaction-reports" element={<ProtectedRoute><TransactionReportsPage /></ProtectedRoute>} />
+              <Route path="/reports/transactions" element={<ProtectedRoute><AccountTransactionReportPage /></ProtectedRoute>} />
+              <Route path="/reports/low-stock" element={<ProtectedRoute><LowStockReport /></ProtectedRoute>} />
+              <Route path="/invoice/view/:id" element={<ProtectedRoute><InvoiceView /></ProtectedRoute>} />
+              <Route path="/finance/expenses" element={<ProtectedRoute><OtherExpensesPage /></ProtectedRoute>} />
+              <Route path="/finance/expenses/new" element={<ProtectedRoute><OtherExpenseFormPage /></ProtectedRoute>} />
+              <Route path="/finance/expenses/:transactionId/edit" element={<ProtectedRoute><OtherExpenseFormPage /></ProtectedRoute>} />
+              <Route path="/finance/income" element={<ProtectedRoute><OtherIncomePage /></ProtectedRoute>} />
+              <Route path="/finance/income/new" element={<ProtectedRoute><OtherIncomeFormPage /></ProtectedRoute>} />
+              <Route path="/finance/income/:transactionId/edit" element={<ProtectedRoute><OtherIncomeFormPage /></ProtectedRoute>} />
+              <Route path="/stock/warehouses" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/stock/in" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/stock/out" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/stock/transfer" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/stock/ledger" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/stock/all" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/attendance/my" element={<ProtectedRoute><MyAttendancePage /></ProtectedRoute>} />
+              <Route path="/attendance/all" element={<ProtectedRoute><AllAttendancePage /></ProtectedRoute>} />
+              <Route path="/attendance/sheet" element={<ProtectedRoute><AttendanceSheetPage /></ProtectedRoute>} />
+              <Route path="/attendance/report" element={<ProtectedRoute><AttendanceReportPage /></ProtectedRoute>} />
               <Route
                 path="/quotation/view/:id"
                 element={
@@ -218,6 +278,14 @@ const App = () => {
                 element={
                   <ProtectedRoute>
                     <Customers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/customers/:clientId/transactions"
+                element={
+                  <ProtectedRoute>
+                    <CustomerWalletPage />
                   </ProtectedRoute>
                 }
               />

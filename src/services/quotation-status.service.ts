@@ -17,11 +17,13 @@ export const QUOTATION_STATUSES = [
   'Pending',
   'Approved by Admin',
   'Sent to Customer',
+  'Revision Requested',
   'Approved by Customer',
+  'Rejected by Customer',
   'Invoice Generated',
-  'Work Started',
-  'On Going',
+  'Work In Progress',
   'Work Completed',
+  'Work Stop Due To Payment',
   'Closed',
   'Rejected'
 ];
@@ -84,6 +86,23 @@ export class QuotationStatusService extends BaseService {
         status: 'error',
         message: error.response?.data?.message || 'Failed to fetch status history',
         data: []
+      };
+    }
+  }
+
+  /** Get the most recent date/time when an invoice was generated for a quotation. */
+  async getLatestInvoiceGenerated(quotationId: string, companyId: string): Promise<ApiResponse<QuotationStatusHistory>> {
+    try {
+      return await this.post<ApiResponse<QuotationStatusHistory>>({
+        type: 16,
+        quotation_id: quotationId,
+        company_id: companyId,
+      });
+    } catch (error: any) {
+      console.error('Get invoice generated date error:', error);
+      return {
+        status: 'error',
+        message: error.response?.data?.message || 'Failed to fetch invoice generation date',
       };
     }
   }

@@ -1,10 +1,20 @@
 // src/pages/CreateQuotation.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Check,
   ChevronLeft,
@@ -20,6 +30,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { clearActiveQuotationCartId, saveQuotationDraft } from "@/services/quotation-cart.service";
 
 const steps = [
   { id: 1, name: "Client", icon: User, path: "client" },
@@ -62,6 +73,7 @@ export const saveQuotationData = (data: any) => {
     const merged = { ...existing, ...data };
     console.log('💾 saveQuotationData:', merged);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    window.dispatchEvent(new CustomEvent("quotation-data-updated"));
   } catch (error) {
     console.error('Failed to save quotation data:', error);
   }
@@ -77,6 +89,59 @@ export default function CreateQuotation() {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentStep, setCurrentStep] = useState(1);
+  const [savingBeforeExit, setSavingBeforeExit] = useState(false);
+  const [itemsQuantityChanged, setItemsQuantityChanged] = useState(false);
+  const [confirmBackOpen, setConfirmBackOpen] = useState(false);
+  const [pendingStep, setPendingStep] = useState<number | null>(null);
+  const autosaveErrorShown = useRef(false);
+
+  const activePath = location.pathname.split("/").pop();
+  const currentStepId = steps.find((step) => step.path === activePath)?.id || 1;
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get("new") !== "1") return;
+    clearQuotationData();
+    clearActiveQuotationCartId();
+    navigate("/create-quotation/client", { replace: true });
+  }, [location.search, navigate]);
+
+  useEffect(() => {
+    const onQuantityDirty = (event: Event) => {
+      const detail = (event as CustomEvent<boolean>).detail;
+      setItemsQuantityChanged(Boolean(detail));
+    };
+    window.addEventListener("quotation-item-quantity-dirty", onQuantityDirty);
+    return () => window.removeEventListener("quotation-item-quantity-dirty", onQuantityDirty);
+  }, []);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (new URLSearchParams(location.search).get("new") === "1") return;
+    const syncDraft = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const draft = getQuotationData();
+        // A real cart draft starts only after the user reaches Items.
+        if (currentStepId >= 4 && draft?.selectedClient?.client_id) {
+          void saveQuotationDraft(draft, currentStepId).then(() => {
+            autosaveErrorShown.current = false;
+          }).catch((error: any) => {
+            console.error("Quotation draft autosave failed:", error);
+            if (!autosaveErrorShown.current) {
+              autosaveErrorShown.current = true;
+              toast({ title: "Draft save failed", description: error.message || "Check your connection and try again.", variant: "destructive" });
+            }
+          });
+        }
+      }, 1000);
+    };
+    window.addEventListener("quotation-data-updated", syncDraft);
+    syncDraft();
+    return () => {
+      window.removeEventListener("quotation-data-updated", syncDraft);
+      if (timer) clearTimeout(timer);
+    };
+  }, [location.pathname, location.search, currentStepId]);
 
   // Get current step from URL
   useEffect(() => {
@@ -97,34 +162,73 @@ export default function CreateQuotation() {
     }
   };
 
+  const requestStepChange = (step: number) => {
+    if (step > currentStep && step !== currentStep + 1) {
+      toast({ title: "Complete each step in order", description: "Use Next Step to continue through the quotation." });
+      return;
+    }
+    if (step === currentStep + 1 && !canProceed()) {
+      toast({ title: "Please complete this step first", variant: "destructive" });
+      return;
+    }
+    if (step < currentStep && currentStep >= 4 && itemsQuantityChanged) {
+      setPendingStep(step);
+      setConfirmBackOpen(true);
+      return;
+    }
+    if (step > currentStep && itemsQuantityChanged) {
+      setItemsQuantityChanged(false);
+      window.dispatchEvent(new CustomEvent("quotation-item-quantity-dirty", { detail: false }));
+    }
+    goToStep(step);
+  };
+
   const canProceed = () => {
     const data = getQuotationData();
+    if (!data) return false;
     switch (currentStep) {
       case 1:
-        return data.selectedClient !== null;
+        return Boolean(data.selectedClient?.client_id);
       case 2:
-        return data.selectedPackage !== null;
+        return Boolean(data.selectedPackage?.package_id);
       case 3:
-        return data.rooms.length > 0;
+        return Array.isArray(data.rooms) && data.rooms.some((room: any) => room.selected !== false);
       case 4:
-        return data.rooms.some((r: any) => r.items?.some((i: any) => i.included));
+        return Array.isArray(data.rooms) && data.rooms.some((r: any) => r.items?.some((i: any) => i.included));
       default:
         return true;
     }
   };
 
   const handleNext = () => {
-    if (!canProceed()) {
-      toast({ title: "Please complete this step first", variant: "destructive" });
-      return;
-    }
-    const nextStep = Math.min(currentStep + 1, 6);
-    goToStep(nextStep);
+    requestStepChange(Math.min(currentStep + 1, 6));
   };
 
   const handlePrevious = () => {
     const prevStep = Math.max(currentStep - 1, 1);
-    goToStep(prevStep);
+    requestStepChange(prevStep);
+  };
+
+  const confirmLeaveItems = () => {
+    const targetStep = pendingStep;
+    setItemsQuantityChanged(false);
+    window.dispatchEvent(new CustomEvent("quotation-item-quantity-dirty", { detail: false }));
+    setConfirmBackOpen(false);
+    setPendingStep(null);
+    if (targetStep) goToStep(targetStep);
+  };
+
+  const handleSaveAndExit = async () => {
+    setSavingBeforeExit(true);
+    try {
+      const draft = getQuotationData();
+      if (currentStepId >= 4 && draft?.selectedClient?.client_id) await saveQuotationDraft(draft, currentStepId);
+      navigate("/quotation-cart");
+    } catch (error: any) {
+      toast({ title: "Draft was not saved", description: error.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setSavingBeforeExit(false);
+    }
   };
 
   // Check if we're on the summary page (step 5)
@@ -136,6 +240,14 @@ export default function CreateQuotation() {
       subtitle="Build a professional quotation step by step"
     >
       <div className="max-w-6xl mx-auto animate-fade-in">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card px-4 py-3">
+          <p className="text-sm text-muted-foreground">Your quotation draft starts saving automatically when you reach Items.</p>
+          {currentStepId >= 4 && (
+            <Button variant="outline" size="sm" onClick={handleSaveAndExit} disabled={savingBeforeExit}>
+              {savingBeforeExit ? "Saving…" : "Save & Exit to My Cart"}
+            </Button>
+          )}
+        </div>
         {/* Progress Steps */}
         <Card className="p-6 mb-6 bg-card border-border shadow-soft">
           <div className="flex items-center justify-between mb-4">
@@ -149,7 +261,7 @@ export default function CreateQuotation() {
               >
                 <div
                   className="flex flex-col items-center cursor-pointer"
-                  onClick={() => goToStep(step.id)}
+                  onClick={() => requestStepChange(step.id)}
                 >
                   <div
                     className={cn(
@@ -202,8 +314,15 @@ export default function CreateQuotation() {
           <Outlet />
         </div>
 
-        {/* Navigation - Hide on Summary page */}
-        {!isSummaryStep && (
+        {/* Keep a clear back path on Summary too, so a resumed draft can return to Items. */}
+        {isSummaryStep ? (
+          <div className="flex justify-start">
+            <Button variant="outline" onClick={handlePrevious} className="gap-2">
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </Button>
+          </div>
+        ) : (
           <div className="flex items-center justify-between">
             <Button
               variant="outline"
@@ -240,6 +359,20 @@ export default function CreateQuotation() {
           </div>
         )}
       </div>
+      <AlertDialog open={confirmBackOpen} onOpenChange={setConfirmBackOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Go back from Items?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You changed one or more product quantities. Are you sure you want to go back to the previous step?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingStep(null)}>Keep Editing</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmLeaveItems}>Yes, Go Back</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }

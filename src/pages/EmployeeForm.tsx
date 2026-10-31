@@ -16,7 +16,7 @@ import {
   LayoutDashboard, FilePlus, FileText, UserPlus, Package, Layers,
   DoorOpen, Ruler, Tag, FolderTree, Map, Building2, MapPin as MapPinIcon,
   Settings, UserCircle, Grid, ClipboardList, BarChart3, PhoneCall, AlertCircle,
-  Calendar as CalendarIcon, ArrowRightLeft
+  Calendar as CalendarIcon, ArrowRightLeft, Cuboid, ShoppingCart, Truck
 } from "lucide-react";
 
 const GENDER_OPTIONS = [
@@ -40,18 +40,64 @@ const PAGE_GROUPS = [
     ]
   },
   {
-    name: "Quotations",
-    icon: FileText,
+    name: "Quotation",
+    icon: FilePlus,
     pages: [
       { value: "create-quotation", label: "Create Quotation" },
+      { value: "create-3d-quotation", label: "Create 3D Quotation" },
+      { value: "quotation-cart", label: "My Quotation Cart" },
+    ]
+  },
+  {
+    name: "Quotation History",
+    icon: FileText,
+    pages: [
       { value: "quotations", label: "Quotation History" },
     ]
   },
   {
-    name: "Clients",
+    name: "Users",
     icon: Users,
     pages: [
+      { value: "employees", label: "Employees" },
       { value: "clients", label: "Clients" },
+      { value: "vendors", label: "Vendors" },
+    ]
+  },
+  {
+    name: "Stock",
+    icon: Package,
+    pages: [
+      { value: "purchases", label: "Purchase Orders" },
+      { value: "purchase-reminders", label: "Payment Reminder" },
+      { value: "purchase-returns", label: "Purchase Returns" },
+      { value: "purchase-payments", label: "Purchase Payments" },
+      { value: "stock-warehouses", label: "Warehouses & Decks" },
+      { value: "stock-in", label: "Stock IN" },
+      { value: "stock-out", label: "Stock OUT" },
+      { value: "stock-transfer", label: "Stock Transfer" },
+      { value: "stock-ledger", label: "Stock Ledger" },
+      { value: "stock-all", label: "All Stock" },
+    ]
+  },
+  {
+    name: "Transactions",
+    icon: CreditCard,
+    pages: [
+      { value: "account-transfer", label: "Account Transfer" },
+      { value: "transaction-reports", label: "All Transactions" },
+      { value: "other-income", label: "Other Income" },
+      { value: "other-expense", label: "Other Expense" },
+    ]
+  },
+  {
+    name: "Attendance",
+    icon: Calendar,
+    pages: [
+      { value: "attendance-my", label: "My Attendance" },
+      { value: "attendance-all", label: "All Attendance" },
+      { value: "attendance-sheet", label: "Attendance Sheet" },
+      { value: "attendance-report", label: "Attendance Report" },
     ]
   },
   {
@@ -70,7 +116,8 @@ const PAGE_GROUPS = [
     name: "Master Data",
     icon: Grid,
     pages: [
-      { value: "employees", label: "Employees" },
+      { value: "accounts", label: "Accounts" },
+      { value: "expense-categories", label: "Expense Categories" },
       { value: "lead-sources", label: "Lead Sources" },
       { value: "lead-statuses", label: "Lead Status" },
       { value: "units", label: "Units" },
@@ -111,8 +158,18 @@ const PAGE_GROUPS = [
   },
 ];
 
+const parseAccessPages = (value?: string) => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch { /* Legacy employee rows use comma-separated permission keys. */ }
+  return value.split(',').map(page => page.trim()).filter(Boolean);
+};
+
 const EMPTY_FORM: Partial<Employee> = {
   login_code: "",
+  employee_number: "",
   name: "",
   phone1: "",
   phone2: "",
@@ -152,7 +209,7 @@ export default function EmployeeForm() {
   // Access pages as array for UI
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   const getCompanyId = (): string => {
     try {
@@ -183,6 +240,7 @@ export default function EmployeeForm() {
               setFormData({
                 emp_id: employee.emp_id,
                 login_code: employee.login_code,
+                employee_number: employee.employee_number || "",
                 name: employee.name,
                 phone1: employee.phone1 || "",
                 phone2: employee.phone2 || "",
@@ -201,7 +259,7 @@ export default function EmployeeForm() {
               }
               // Parse access pages
               if (employee.access_pages) {
-                setSelectedPages(employee.access_pages.split(',').map((p: string) => p.trim()).filter(Boolean));
+                setSelectedPages(parseAccessPages(employee.access_pages));
               }
             } else {
               toast({ title: "Error", description: "Employee not found", variant: "destructive" });
@@ -360,6 +418,7 @@ export default function EmployeeForm() {
       formDataToSend.append('type', isEditMode ? '2' : '1');
       formDataToSend.append('company_id', getCompanyId());
       formDataToSend.append('login_code', formData.login_code!.trim());
+      if (formData.employee_number?.trim()) formDataToSend.append('employee_number', formData.employee_number.trim());
       formDataToSend.append('name', formData.name!.trim());
 
       // Add optional fields (only if they have values)
@@ -479,6 +538,19 @@ export default function EmployeeForm() {
                   placeholder="e.g. EMP001"
                   disabled={isViewMode}
                   required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="employee_number">Employee Number</Label>
+                <Input
+                  id="employee_number"
+                  value={formData.employee_number || ""}
+                  onChange={(e) => setFormData((p) => ({ ...p, employee_number: e.target.value.toUpperCase() }))}
+                  className="h-11 rounded-xl mt-1.5 font-mono"
+                  placeholder="Enter employee number"
+                  disabled={isViewMode}
+                  maxLength={50}
                 />
               </div>
             </div>

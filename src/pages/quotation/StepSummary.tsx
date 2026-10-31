@@ -34,6 +34,7 @@ import {
   saveQuotationData,
   clearQuotationData,
 } from "../CreateQuotation";
+import { clearActiveQuotationCartId, getActiveQuotationCartId, quotationCartService, saveQuotationDraft } from "@/services/quotation-cart.service";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const roundToTwo = (n: number) => Math.round(n * 100) / 100;
@@ -61,26 +62,6 @@ function calcCalculatedQty(item: any): number {
 function calcRmRequiredQty(rm: any, calculatedQty: number): number {
   const base = parseFloat(rm.rm_qty) || 0;
   return roundToTwo(base * calculatedQty);
-}
-
-// ─── API URL ────────────────────────────────────────────────────────────────
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "https://sunshineproduct.in/interior_designer/v1_api/";
-
-// ─── API call ────────────────────────────────────────────────────────────────
-async function submitQuotation(payload: any): Promise<any> {
-  const url = `${API_URL}quotation.php`;
-  console.log("Submitting to:", url);
-  console.log("Payload:", payload);
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -226,7 +207,7 @@ export default function StepSummary() {
     setConfirmDialogOpen(true);
   };
 
-  // ── Build API payload & submit ────────────────────────────────────────────
+  // ── Convert the saved cart draft into a quotation ─────────────────────────
   const handleConfirmCreate = async () => {
     setConfirmDialogOpen(false);
     setSubmitting(true);
@@ -241,67 +222,8 @@ export default function StepSummary() {
         }
       })();
 
-      const generatedBy: string = (() => {
-        try {
-          const raw = localStorage.getItem("user_data");
-          return raw ? JSON.parse(raw)?.emp_id || "" : "";
-        } catch {
-          return "";
-        }
-      })();
-
-      // Build rooms payload - use roomsData directly
-      const roomsPayload = roomsData
-        .map((room: any) => {
-          const includedItems =
-            room.items?.filter((i: any) => i.included) || [];
-          if (includedItems.length === 0) return null;
-
-          const items = includedItems.map((item: any) => {
-            const calculated_qty = calcCalculatedQty(item);
-            const total_price = roundToTwo(
-              calculated_qty * (item.unit_price || 0),
-            );
-
-            // Build raw-material lines
-            const raw_materials = (item.raw_materials || []).map((rm: any) => ({
-              rm_id: rm.rm_id || rm.id || "",
-              required_qty: calcRmRequiredQty(rm, calculated_qty),
-              unit: rm.unit_name || rm.unit || "",
-            }));
-
-            return {
-              product_id: item.product_id,
-              is_special: item.is_special ? 1 : 0,
-              qty_type: item.qty_type || "Fixed",
-              qty: item.quantity || 1,
-              height: item.height || 0,
-              width: item.width || 0,
-              depth: item.depth || 0,
-              length: item.length || 0,
-              dimension_unit: item.measurement_unit || "feet",
-              unit_price: item.unit_price || 0,
-              calculated_qty,
-              total_price,
-              remark: item.remark || "",
-              raw_materials,
-            };
-          });
-
-          const room_total = items.reduce(
-            (s: number, i: any) => s + i.total_price,
-            0,
-          );
-
-          return {
-            room_id: room.room_id || room.id,
-            room_total: roundToTwo(room_total),
-            items,
-          };
-        })
-        .filter(Boolean);
-
-      if (roomsPayload.length === 0) {
+      const hasSavedProducts = roomsData.some((room: any) => room.items?.some((item: any) => item.included));
+      if (!hasSavedProducts) {
         toast({
           title: "No included items",
           description: "Please include at least one product.",
@@ -311,26 +233,12 @@ export default function StepSummary() {
         return;
       }
 
-      const payload = {
-        type: 1,
-        company_id: companyId,
-        client_id: selectedClient.client_id,
-        package_id: selectedPackage?.package_id || "",
-        generated_by: generatedBy,
-        subtotal: roundToTwo(subtotal),
-        discount_type: discountType === "pct" ? "PCT" : "INR",
-        discount_value: discountValue,
-        discount_amount: roundToTwo(discountAmount),
-        amount_after_discount: roundToTwo(afterDiscount),
-        gst_applicable: gstPercent > 0 ? 1 : 0,
-        gst_percent: gstPercent,
-        gst_amount: roundToTwo(taxAmount),
-        final_amount: roundToTwo(grandTotal),
-        remark: specialInstructions,
-        rooms: roomsPayload,
-      };
-
-      const result = await submitQuotation(payload);
+      // Ensure the latest summary values and product edits are persisted before
+      // converting this resumable cart draft to a real quotation.
+      await saveQuotationDraft(getQuotationData(), 5);
+      const cartId = getActiveQuotationCartId(companyId);
+      if (!cartId) throw new Error("The quotation draft could not be saved. Please try again.");
+      const result = await quotationCartService.convert(cartId, companyId);
 
       if (result.status === "success") {
         toast({
@@ -340,6 +248,7 @@ export default function StepSummary() {
 
         // ── CLEAR ALL QUOTATION DATA ──────────────────────────────────
         clearQuotationData();
+        clearActiveQuotationCartId(companyId);
 
         // Navigate to quotations list
         navigate("/quotations");

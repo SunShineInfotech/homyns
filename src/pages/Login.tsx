@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import axios from "axios";
+import { applyCompanyTheme } from "@/lib/company-theme";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -46,11 +47,11 @@ export default function Login() {
 
   const API_URL =
     import.meta.env.VITE_API_URL ||
-    "https://sunshineproduct.in/interior_designer/v1_api/";
+    "";
 
   // Get base path from environment
   const BASE_PATH =
-    import.meta.env.VITE_BASE_PATH || "/interior_designer/build_v1/";
+    import.meta.env.VITE_BASE_PATH || "";
 
   // Check if user is already logged in
   useEffect(() => {
@@ -72,34 +73,7 @@ export default function Login() {
 
   // Update CSS variables when company colors change
   useEffect(() => {
-    if (companyColors.background_color) {
-      document.documentElement.style.setProperty(
-        "--primary",
-        companyColors.background_color,
-      );
-      document.documentElement.style.setProperty(
-        "--sidebar-bg",
-        companyColors.background_color,
-      );
-      document.documentElement.style.setProperty(
-        "--sidebar-accent",
-        companyColors.background_color,
-      );
-      document.documentElement.style.setProperty(
-        "--sidebar-hover",
-        adjustColor(companyColors.background_color, -20),
-      );
-      document.documentElement.style.setProperty(
-        "--primary-glow",
-        adjustColor(companyColors.background_color, 20),
-      );
-    }
-    if (companyColors.text_color) {
-      document.documentElement.style.setProperty(
-        "--sidebar-foreground",
-        companyColors.text_color,
-      );
-    }
+    applyCompanyTheme(companyColors);
   }, [companyColors]);
 
   // Helper function to adjust color brightness

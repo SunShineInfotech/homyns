@@ -71,7 +71,7 @@ export default function StepPackage() {
 
   const handleSelectPackage = (pkg: QuotationPackage) => {
     setSelectedPackage(pkg);
-    saveQuotationData({ selectedPackage: pkg });
+    saveQuotationData({ selectedPackage: pkg, resumeCart: false });
   };
 
   const handleNext = () => {
@@ -83,7 +83,7 @@ export default function StepPackage() {
   };
 
   const handleSkip = () => {
-    saveQuotationData({ selectedPackage: null });
+    saveQuotationData({ selectedPackage: null, resumeCart: false });
     navigate("/create-quotation/rooms");
     toast({ title: "Skipped", description: "Package selection skipped" });
   };

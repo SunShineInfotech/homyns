@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { followupService, Followup } from "@/services/followup.service";
+import { getDateInIndia, getIndiaDate } from "@/lib/india-date";
 import {
   Search,
   Loader2,
@@ -28,9 +29,7 @@ export default function TodayFollowups() {
   const [filtered, setFiltered] = useState<Followup[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+  const [selectedDate, setSelectedDate] = useState<string>(() => getIndiaDate());
 
   const getCompanyId = (): string => {
     try {
@@ -96,7 +95,7 @@ export default function TodayFollowups() {
         // Step 2: keep only leads whose latest entry is due on the selected date.
         const todayFollowups = latestPerLead.filter((f) => {
           if (!f.next_followup_date) return false;
-          const fDate = new Date(f.next_followup_date).toISOString().split('T')[0];
+          const fDate = getDateInIndia(f.next_followup_date);
           return fDate === selectedDate;
         });
         setFollowups(todayFollowups);
@@ -167,7 +166,7 @@ export default function TodayFollowups() {
     );
   }
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === getIndiaDate();
 
   return (
     <MainLayout title="Today Followups" subtitle="Followups due today">

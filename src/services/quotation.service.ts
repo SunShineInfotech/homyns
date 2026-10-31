@@ -30,6 +30,7 @@ export interface Quotation {
   customer_approved_time?: string;
   whatsapp_sent?: boolean;
   whatsapp_sent_at?: string;
+  invoice_generated_at?: string;
   is_deleted?: string;
   c_date?: string;
   rooms?: any[];

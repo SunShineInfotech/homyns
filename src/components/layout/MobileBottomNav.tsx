@@ -1,6 +1,6 @@
 // src/components/layout/MobileBottomNav.tsx
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Home, FileText, Plus, Users, UserCircle, Sparkles } from "lucide-react";
+import { Home, FileText, Plus, UserCircle, Sparkles, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
@@ -8,8 +8,8 @@ import { useState, useEffect } from "react";
 const ALL_ITEMS = [
   { icon: Home, label: "Home", path: "/", permission: "dashboard" },
   { icon: FileText, label: "Quotes", path: "/quotations", permission: "quotations" },
-  { icon: null, label: "", path: "/create-quotation", center: true, permission: "create-quotation" },
-  { icon: Users, label: "Clients", path: "/clients", permission: "clients" },
+  { icon: ShoppingCart, label: "My Cart", path: "/quotation-cart", permission: "create-quotation" },
+  { icon: null, label: "", path: "/create-quotation?new=1", center: true, permission: "create-quotation" },
   { icon: UserCircle, label: "Profile", path: "/profile", permission: "profile" },
 ];
 
@@ -91,7 +91,7 @@ export function MobileBottomNav() {
               return (
                 <div key={it.path} className="relative -mt-8 flex items-center justify-center">
                   <button
-                    onClick={() => navigate("/create-quotation/client")}
+                    onClick={() => navigate("/create-quotation?new=1")}
                     aria-label="Create Quotation"
                     className={cn(
                       "w-14 h-14 rounded-2xl shadow-[0_8px_25px_rgba(99,102,241,0.4)] flex items-center justify-center transition-all duration-300",

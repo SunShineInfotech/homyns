@@ -51,7 +51,7 @@ export default function PackageForm() {
   const [newRoomId, setNewRoomId] = useState("");
   const [roomError, setRoomError] = useState("");
 
-  const API_URL = import.meta.env.VITE_API_URL || "https://sunshineproduct.in/interior_designer/v1_api/";
+  const API_URL = import.meta.env.VITE_API_URL || "";
 
   const getCompanyId = (): string => {
     try {

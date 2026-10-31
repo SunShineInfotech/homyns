@@ -67,7 +67,7 @@ export default function Employees() {
   const [passwordError, setPasswordError] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   const getCompanyId = (): string => {
     try {
@@ -90,7 +90,7 @@ export default function Employees() {
         // Parse access_pages to array for display
         const formattedData = res.data.map((emp: any) => ({
           ...emp,
-          access_pages_list: emp.access_pages ? emp.access_pages.split(',').map((p: string) => p.trim()) : []
+          access_pages_list: (() => { try { const pages = JSON.parse(emp.access_pages || ""); if (Array.isArray(pages)) return pages; } catch { /* Legacy comma-separated list */ } return emp.access_pages ? emp.access_pages.split(',').map((p: string) => p.trim()) : []; })()
         }));
         setEmployees(formattedData);
       } else {
@@ -113,6 +113,7 @@ export default function Employees() {
         (e) =>
           e.name?.toLowerCase().includes(q) ||
           e.login_code?.toLowerCase().includes(q) ||
+          e.employee_number?.toLowerCase().includes(q) ||
           e.email?.toLowerCase().includes(q) ||
           e.phone1?.includes(q)
       );
@@ -312,6 +313,7 @@ export default function Employees() {
                         Login Code <SortIcon col="login_code" />
                       </span>
                     </th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Employee No.</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Image</th>
                     <th
                       className="px-4 py-3 text-left font-medium text-muted-foreground cursor-pointer select-none"
@@ -339,6 +341,7 @@ export default function Employees() {
                       <td className="px-4 py-3 text-muted-foreground">{idx + 1}</td>
                       <td className="px-4 py-3 font-medium">{e.name}</td>
                       <td className="px-4 py-3 font-mono text-sm">{e.login_code}</td>
+                      <td className="px-4 py-3 font-mono text-sm">{e.employee_number || "—"}</td>
                       <td className="px-4 py-3">
                         {e.profile_image ? (
                           <img 
@@ -420,6 +423,7 @@ export default function Employees() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold truncate">{e.name}</p>
                     <p className="text-xs text-muted-foreground">Login: {e.login_code}</p>
+                    {e.employee_number && <p className="text-xs text-muted-foreground">Employee No.: {e.employee_number}</p>}
                     <div className="flex items-center gap-2 mt-1">
                       <Badge 
                         variant={e.status === "Active" ? "success" : "secondary"}

@@ -63,6 +63,12 @@ export default function StepRooms() {
 
       // Get saved quotation data to get selected package
       const saved = getQuotationData();
+      if (saved?.resumeCart && Array.isArray(saved.rooms) && saved.rooms.length > 0) {
+        setRooms(saved.rooms);
+        setExpandedRooms(saved.expandedRooms || [saved.rooms[0].id]);
+        setLoading(false);
+        return;
+      }
       const selectedPackage = saved?.selectedPackage;
 
       if (!selectedPackage || !selectedPackage.package_id) {

@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Homyns — Corporate Design System */
-
 @layer base {
   :root {
     /* Surfaces */

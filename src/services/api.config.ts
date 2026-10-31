@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // Get API URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+export const API_URL = import.meta.env.VITE_API_URL || '';
 
 console.log('API URL:', API_URL); // Debug: Check if URL is correct
 

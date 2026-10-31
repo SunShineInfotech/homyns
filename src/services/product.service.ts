@@ -15,6 +15,7 @@ export interface Product {
   dimension_unit_id?: string;
   dimension_unit_name?: string;
   price?: number;
+  current_stock?: number;
   gst_percent?: number;
   image?: string;
   description?: string;

@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Loader2, AlertCircle, Printer, Layers } from "lucide-react";
+import html2pdf from "html2pdf.js";
 import { quotationService } from "@/services/quotation.service";
+import { quotationStatusService, QuotationStatusHistory } from "@/services/quotation-status.service";
 import { termsService } from "@/services/terms.service";
 import { companyService } from "@/services/company.service";
+import { API_URL } from "@/services/api.config";
+import { PRODUCTION_STATUSES } from "@/services/workorder.service";
 
 // ─── Number to Words ────────────────────────────────────────────────────────
 function numberToWords(num: number): string {
@@ -73,6 +77,40 @@ function numberToWords(num: number): string {
 
 const fc = (n: number) => `\u20B9${Math.round(n || 0).toLocaleString("en-IN")}`;
 
+const getWorkOrderImageUrl = (imagePath?: string) => {
+  if (!imagePath) return "";
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  const apiBaseUrl = API_URL.endsWith("/") ? API_URL : `${API_URL}/`;
+  return new URL(imagePath.replace(/^\/+/, ""), apiBaseUrl).toString();
+};
+
+const getCompanyLogoUrl = (logo?: string) => {
+  if (!logo) return "";
+  if (/^https?:\/\//i.test(logo)) return logo;
+  const apiBaseUrl = API_URL.endsWith("/") ? API_URL : `${API_URL}/`;
+  const logoPath = logo.replace(/^\/+/, "");
+  if (logoPath.startsWith("uploadfiles/")) {
+    return new URL(`../${logoPath}`, apiBaseUrl).toString();
+  }
+  if (logoPath.startsWith("interior_designer/")) {
+    return new URL(`/${logoPath}`, new URL(apiBaseUrl).origin).toString();
+  }
+  return new URL(`../uploadfiles/company/${logoPath}`, apiBaseUrl).toString();
+};
+
+const imageToDataUrl = (imageUrl: string): Promise<string> =>
+  fetch(imageUrl, { mode: "cors", credentials: "omit" })
+    .then((response) => {
+      if (!response.ok) throw new Error("Image request failed");
+      return response.blob();
+    })
+    .then((blob) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Image conversion failed"));
+      reader.onerror = () => reject(new Error("Image conversion failed"));
+      reader.readAsDataURL(blob);
+    }));
+
 // ─── Legacy calculated qty/label helper (kept untouched — used elsewhere) ───
 function getQtyInfo(item: any) {
   const w = parseFloat(item.width) || 0;
@@ -110,7 +148,7 @@ function getQtyInfo(item: any) {
 // Directly reads item.qty_type, item.calculated_qty, item.unit_price,
 // item.total_price, item.height, item.width from the API response.
 // No recalculation is done here — values are shown exactly as received.
-// Matches the HOMYNS reference PDF: Width (Inch) / Height (Inch) / Qty / Per /
+// Matches the quotation reference PDF: Width (Inch) / Height (Inch) / Qty / Per /
 // Total Measure / Rate / Amount. Fixed-type items (e.g. Paint, Curtain) show
 // blank width/height/per, same as the reference document.
 function getPrintDisplayInfo(item: any) {
@@ -171,7 +209,7 @@ const GlobeIcon = () => (
   </svg>
 );
 
-// Helper to get company color (falls back to HOMYNS red)
+// Helper to get company color (falls back to the standard brand red)
 const getCompanyColor = (): string => {
   try {
     const data = localStorage.getItem("company_data");
@@ -300,6 +338,25 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 .qp-ft{text-align:center;padding:18px 16px 6px;font-size:11px;color:#94a3b8;}
 .qp-ft a{color:var(--company-color, #ee3c31);text-decoration:none;font-weight:600;}
 
+/* Product-wise work order page (screen only; intentionally excluded from PDF) */
+.qp-work-order-page{margin-top:22px;background:#fff;border:1px solid #d8dde3;padding:22px 28px;}
+.qp-wo-title{font-size:16px;font-weight:800;color:#1a1a1a;margin-bottom:16px;}
+.qp-wo-room{font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px;}
+.qp-wo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.qp-wo-card{min-width:0;border:1px solid #e2e8f0;border-radius:9px;padding:13px;break-inside:avoid;}
+.qp-wo-product{font-size:13px;font-weight:700;color:#1a1a1a;overflow-wrap:anywhere;}
+.qp-wo-status{display:inline-flex;margin-top:8px;border-radius:999px;padding:4px 9px;background:#ecfeff;color:#0e7490;font-size:11px;font-weight:700;}
+.qp-wo-remark{margin-top:9px;color:#475569;font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;}
+.qp-wo-image{display:block;margin-top:10px;max-width:100%;max-height:220px;object-fit:contain;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;}
+.qp-pdf-overlay{position:fixed;inset:0;z-index:200;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;}
+.qp-pdf-dialog{width:min(100%,390px);background:#fff;border-radius:14px;padding:22px;box-shadow:0 24px 60px rgba(15,23,42,.25);font-family:'Inter',system-ui,sans-serif;}
+.qp-pdf-dialog h2{font-size:17px;font-weight:800;color:#1a1a1a;}
+.qp-pdf-dialog p{margin:7px 0 16px;color:#64748b;font-size:13px;line-height:1.5;}
+.qp-pdf-dialog button{display:block;width:100%;margin-top:9px;border:0;border-radius:8px;padding:11px 14px;background:var(--company-color, #ee3c31);color:#fff;font-size:13px;font-weight:700;cursor:pointer;}
+.qp-pdf-dialog button:disabled{opacity:.6;cursor:wait;}
+.qp-pdf-dialog button.qp-pdf-cancel{background:#f1f5f9;color:#475569;}
+.qp-pdf-error{margin:10px 0 0!important;color:#b91c1c!important;}
+
 /* ─── RESPONSIVE ────────────────────────────────────────────────────────── */
 @media(max-width:768px){
   .qp-wrap{padding:16px 10px 30px;}
@@ -320,6 +377,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
   .qp-gv{font-size:17px;}
   .qp-tbl{font-size:11px;min-width:520px;}
   .qp-bar-co{font-size:13px;max-width:150px;}
+  .qp-wo-grid{grid-template-columns:1fr;}
+  .qp-work-order-page{padding:16px 18px;}
 }
 
 @media(max-width:480px){
@@ -349,7 +408,25 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
   .qp-toti{flex-direction:column-reverse;}
   .qp-tt{min-width:auto;}
   .qp-tml{grid-template-columns:1fr;}
+  .qp-work-order-page{padding:14px 12px;}
 }
+
+/* Fixed desktop composition for PDF downloads initiated from mobile devices */
+html.qp-export-desktop .qp-wrap{max-width:900px!important;padding:24px 16px 40px!important;}
+html.qp-export-desktop .qp-hd{grid-template-columns:auto 1fr auto!important;gap:18px!important;padding:22px 28px!important;}
+html.qp-export-desktop .qp-hd-right{align-items:flex-start!important;}
+html.qp-export-desktop .qp-logo{width:64px!important;height:64px!important;font-size:20px!important;}
+html.qp-export-desktop .qp-co-name{font-size:20px!important;}
+html.qp-export-desktop .qp-cl{padding:16px 28px!important;}
+html.qp-export-desktop .qp-clg{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;}
+html.qp-export-desktop .qp-clf.full{grid-column:1/-1!important;}
+html.qp-export-desktop .qp-meta{padding:14px 28px!important;}
+html.qp-export-desktop .qp-tot{padding:18px 28px!important;}
+html.qp-export-desktop .qp-tm{padding:18px 28px!important;}
+html.qp-export-desktop .qp-sg{grid-template-columns:1fr 1fr!important;gap:32px!important;padding:26px 28px 30px!important;}
+html.qp-export-desktop .qp-tbl{font-size:12px!important;min-width:640px!important;}
+html.qp-export-desktop .qp-work-order-page{padding:22px 28px!important;}
+html.qp-export-desktop .qp-wo-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
 
 /* ─── PRINT STYLES ────────────────────────────────────────────────────── */
 @media print{
@@ -359,6 +436,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
   .qp{background:#fff!important;}
   .qp-bar{display:none!important;}
   .qp-ft{display:none!important;}
+  .qp-work-order-page{display:none!important;}
+  .qp-pdf-overlay{display:none!important;}
   .qp-wrap{padding:0!important;max-width:100%!important;}
   .qp-doc{border:none!important;}
   .qp-tbl tr{page-break-inside:avoid;}
@@ -382,7 +461,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 @keyframes spin{to{transform:rotate(360deg);}}
 `;
 
-export default function PublicQuotationView() {
+export default function PublicQuotationView({ documentType = "quotation" }: { documentType?: "quotation" | "invoice" }) {
+  const isInvoice = documentType === "invoice";
   const { id } = useParams();
   const [quotation, setQuotation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -390,6 +470,10 @@ export default function PublicQuotationView() {
   const [terms, setTerms] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
   const [companyColor, setCompanyColor] = useState("#ee3c31");
+  const [pdfChoiceOpen, setPdfChoiceOpen] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+  const [invoiceHistory, setInvoiceHistory] = useState<QuotationStatusHistory | null>(null);
 
   const getCompanyId = (): string => {
     try {
@@ -428,6 +512,12 @@ export default function PublicQuotationView() {
           setQuotation(q);
           const cid = q.company_id || getCompanyId();
           if (cid) {
+            if (isInvoice) {
+              try {
+                const invoiceResult = await quotationStatusService.getLatestInvoiceGenerated(id, String(cid));
+                if (invoiceResult.status === "success" && invoiceResult.data) setInvoiceHistory(invoiceResult.data);
+              } catch { }
+            }
             try {
               const cr = await companyService.getCompany(cid);
               if (cr.status === "success" && cr.data) {
@@ -452,7 +542,63 @@ export default function PublicQuotationView() {
         setLoading(false);
       }
     })();
-  }, [id]);
+  }, [id, isInvoice]);
+
+  // Use the quotation's company details for browser title and share metadata.
+  useEffect(() => {
+    if (!quotation) return;
+
+    const metaCompanyName = company?.company_name || quotation.company_name || "Interior Design Company";
+    const quotationNumber = quotation.quotation_number || String(quotation.quotation_id || "");
+    const documentLabel = isInvoice ? "Invoice" : "Quotation";
+    const title = `${metaCompanyName} | ${documentLabel} ${quotationNumber}`;
+    const description = `${metaCompanyName} ${documentLabel.toLowerCase()} ${quotationNumber}. View ${documentLabel.toLowerCase()} details and product-wise work status.`;
+    const logo = getCompanyLogoUrl(company?.logo || quotation.logo || quotation.company_logo || "");
+    const previousTitle = document.title;
+    const restore: Array<() => void> = [];
+    document.title = title;
+
+    const upsertHeadTag = (selector: string, tagName: "meta" | "link", attribute: string, value: string) => {
+      let element = document.head.querySelector<HTMLElement>(selector);
+      const wasCreated = !element;
+      if (!element) {
+        element = document.createElement(tagName);
+        document.head.appendChild(element);
+      }
+      const previousValue = element.getAttribute(attribute);
+      element.setAttribute(attribute, value);
+      restore.push(() => {
+        if (wasCreated) element?.remove();
+        else if (previousValue === null) element?.removeAttribute(attribute);
+        else element?.setAttribute(attribute, previousValue);
+      });
+    };
+
+    upsertHeadTag('meta[name="description"]', "meta", "content", description);
+    upsertHeadTag('meta[name="keywords"]', "meta", "content", `${metaCompanyName}, ${documentLabel.toLowerCase()}, interior design`);
+    upsertHeadTag('meta[name="author"]', "meta", "content", metaCompanyName);
+    upsertHeadTag('meta[property="og:type"]', "meta", "content", "website");
+    upsertHeadTag('meta[property="og:url"]', "meta", "content", window.location.href);
+    upsertHeadTag('meta[property="og:title"]', "meta", "content", title);
+    upsertHeadTag('meta[property="og:description"]', "meta", "content", description);
+    upsertHeadTag('meta[property="og:site_name"]', "meta", "content", metaCompanyName);
+    upsertHeadTag('meta[name="twitter:card"]', "meta", "content", "summary_large_image");
+    upsertHeadTag('meta[name="twitter:title"]', "meta", "content", title);
+    upsertHeadTag('meta[name="twitter:description"]', "meta", "content", description);
+    upsertHeadTag('link[rel="canonical"]', "link", "href", window.location.href);
+    upsertHeadTag('meta[name="theme-color"]', "meta", "content", companyColor);
+    if (logo) {
+      upsertHeadTag('meta[property="og:image"]', "meta", "content", logo);
+      upsertHeadTag('meta[name="twitter:image"]', "meta", "content", logo);
+      upsertHeadTag('link[rel="icon"]', "link", "href", logo);
+      upsertHeadTag('link[rel="apple-touch-icon"]', "link", "href", logo);
+    }
+
+    return () => {
+      if (document.title === title) document.title = previousTitle;
+      restore.reverse().forEach((restoreTag) => restoreTag());
+    };
+  }, [quotation, company, companyColor, isInvoice]);
 
   if (loading)
     return (
@@ -461,7 +607,7 @@ export default function PublicQuotationView() {
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#e9edf1" }}>
           <div style={{ textAlign: "center" }}>
             <Loader2 style={{ width: 40, height: 40, animation: "spin 1s linear infinite", color: companyColor, margin: "0 auto 12px" }} />
-            <p style={{ color: "#64748b", fontSize: 14, fontFamily: "Inter,system-ui,sans-serif" }}>Loading quotation…</p>
+            <p style={{ color: "#64748b", fontSize: 14, fontFamily: "Inter,system-ui,sans-serif" }}>Loading {isInvoice ? "invoice" : "quotation"}…</p>
           </div>
         </div>
       </>
@@ -476,8 +622,8 @@ export default function PublicQuotationView() {
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <AlertCircle style={{ width: 36, height: 36, color: "#ef4444" }} />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>Quotation Not Found</h2>
-            <p style={{ color: "#64748b", fontSize: 14, marginBottom: 20 }}>{error || "This quotation doesn't exist."}</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>{isInvoice ? "Invoice" : "Quotation"} Not Found</h2>
+            <p style={{ color: "#64748b", fontSize: 14, marginBottom: 20 }}>{error || `This ${isInvoice ? "invoice" : "quotation"} doesn't exist.`}</p>
             <button
               onClick={() => (window.location.href = "/")}
               style={{ background: companyColor, color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}
@@ -496,7 +642,7 @@ export default function PublicQuotationView() {
   const cWA = company?.whatsapp_number || quotation.whatsapp_number || "";
   const cGst = company?.gst_number || quotation.gst_number || "";
   const cWebsite = company?.website || quotation.company_website || "";
-  const cLogo = company?.logo || "";
+  const cLogo = getCompanyLogoUrl(company?.logo || quotation.logo || quotation.company_logo || "");
 
   const custName = quotation.client_name || quotation.customer_name || "Customer";
   const custPhone = [quotation?.phone1, quotation?.phone2, quotation?.mobile].filter(Boolean).join(", ") || "—";
@@ -520,7 +666,14 @@ export default function PublicQuotationView() {
   const afterDisc = subtotal - discAmt;
 
   const qDate = quotation.c_date ? new Date(quotation.c_date) : new Date();
-  const fmtDate = qDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  const quotationDateLabel = qDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  const invoiceDateValue = quotation.invoice_generated_at || (invoiceHistory?.c_date
+    ? `${invoiceHistory.c_date.slice(0, 10)} ${invoiceHistory.c_time || ""}`.trim()
+    : "");
+  const invoiceDateLabel = invoiceDateValue
+    ? `${new Date(`${invoiceDateValue.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}${invoiceDateValue.length > 10 ? ` · ${invoiceDateValue.slice(11, 16)} IST` : ""}`
+    : "—";
+  const fmtDate = isInvoice ? invoiceDateLabel : quotationDateLabel;
 
   // Group by room, preserving order
   const roomGroups: { name: string; items: any[] }[] = [];
@@ -532,6 +685,90 @@ export default function PublicQuotationView() {
     }
     roomGroups[roomGroups.length - 1].items.push(item);
   });
+
+  const downloadPdf = async (kind: "quotation" | "work-order" | "both") => {
+    const selector = kind === "quotation"
+      ? ".qp-doc"
+      : kind === "work-order"
+        ? ".qp-work-order-page"
+        : ".qp-pdf-bundle";
+    const element = document.querySelector<HTMLElement>(selector);
+    if (!element) return;
+
+    setGeneratingPdf(true);
+    const originalImageSources: Array<{ image: HTMLImageElement; src: string }> = [];
+    const originalElementStyle = element.getAttribute("style");
+    document.documentElement.classList.add("qp-export-desktop");
+    try {
+      // Keep export layout identical on mobile and desktop: use the same
+      // 900px document width and render CSS as a desktop-sized viewport.
+      element.style.width = "900px";
+      element.style.maxWidth = "none";
+      element.style.marginLeft = "auto";
+      element.style.marginRight = "auto";
+
+      // Embed accessible images as data URLs before html2canvas snapshots the
+      // actual visible page content. Restore their original URLs afterwards.
+      const images = Array.from(element.querySelectorAll("img"));
+      const inaccessibleExternalImages: string[] = [];
+      await Promise.all(images.map(async (image) => {
+        const source = image.currentSrc || image.src;
+        if (!source || source.startsWith("data:")) return;
+        try {
+          const dataUrl = await imageToDataUrl(source);
+          originalImageSources.push({ image, src: image.getAttribute("src") || source });
+          image.src = dataUrl;
+        } catch {
+          try {
+            if (new URL(source).origin !== window.location.origin) {
+              inaccessibleExternalImages.push(source);
+            }
+          } catch {
+            inaccessibleExternalImages.push(source);
+          }
+        }
+        try {
+          await image.decode();
+        } catch {
+          // Keep generating the PDF if an optional product image is unavailable.
+        }
+      }));
+      if (inaccessibleExternalImages.length > 0) {
+        throw new Error("The image server is blocking PDF access. Enable CORS for the company logo and work-order upload folders, then try again.");
+      }
+
+      const safeQuotationNumber = String(quotation.quotation_number || quotation.id || "quotation")
+        .replace(/[^a-z0-9_-]+/gi, "_");
+      const documentName = isInvoice ? "Invoice" : "Quotation";
+      const title = kind === "quotation" ? documentName : kind === "work-order" ? "Work_Order" : `${documentName}_and_Work_Order`;
+      await html2pdf()
+        .set({
+          margin: 8,
+          filename: `${title}_${safeQuotationNumber}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            logging: false,
+            windowWidth: 1200,
+          },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(element)
+        .save();
+      setPdfChoiceOpen(false);
+    } catch (downloadError) {
+      console.error("PDF download failed:", downloadError);
+      setPdfError(downloadError instanceof Error ? downloadError.message : "Could not create the PDF. Please try again.");
+    } finally {
+      originalImageSources.forEach(({ image, src }) => { image.src = src; });
+      if (originalElementStyle === null) element.removeAttribute("style");
+      else element.setAttribute("style", originalElementStyle);
+      document.documentElement.classList.remove("qp-export-desktop");
+      setGeneratingPdf(false);
+    }
+  };
 
   const tableRows: JSX.Element[] = [];
   let sr = 0;
@@ -597,13 +834,14 @@ export default function PublicQuotationView() {
             <span className="qp-bar-sep">·</span>
             <span className="qp-bar-num">{quotation.quotation_number}</span>
           </div>
-          <button className="qp-btn" onClick={() => window.print()}>
+          <button className="qp-btn" onClick={() => { setPdfError(""); setPdfChoiceOpen(true); }}>
             <Printer style={{ width: 15, height: 15 }} />
             Print / Save PDF
           </button>
         </div>
 
         <div className="qp-wrap">
+          <div className="qp-pdf-bundle">
           <div className="qp-doc">
             {/* HEADER — logo/company left, Web/Email/Mobile stacked right, like the reference PDF */}
             <div className="qp-hd">
@@ -642,15 +880,15 @@ export default function PublicQuotationView() {
               </div>
             </div>
 
-            {/* QUOTATION META */}
+            {/* Document date and number */}
             <div className="qp-meta">
-              <div className="qp-meta-l">Quotation Date: <b>{fmtDate}</b></div>
+              <div className="qp-meta-l">{isInvoice ? "Invoice Date" : "Quotation Date"}: <b>{fmtDate}</b></div>
               <div className="qp-meta-num">{quotation.quotation_number}</div>
             </div>
 
             {/* CLIENT */}
             <div className="qp-cl">
-              <div className="qp-ey">Prepared For</div>
+              <div className="qp-ey">{isInvoice ? "Bill To" : "Prepared For"}</div>
               <div className="qp-clg">
                 <div className="qp-clf">
                   <label>Client Name</label>
@@ -781,6 +1019,60 @@ export default function PublicQuotationView() {
               </div>
             </div>
           </div>
+
+          {/* Product-wise work order details: screen only, excluded from quotation PDF */}
+          <section className="qp-work-order-page" aria-label="Product-wise work order status">
+            <h2 className="qp-wo-title">Product-wise Work Order Status</h2>
+            {roomGroups.map((room, roomIndex) => (
+              <div key={`${room.name}-${roomIndex}`}>
+                <h3 className="qp-wo-room">{room.name || `Room ${roomIndex + 1}`}</h3>
+                <div className="qp-wo-grid">
+                  {room.items.map((item: any, productIndex: number) => {
+                    const statusValue = Number(item.production_status || 1);
+                    const history = item.latest_work_status || item.latest_history || item.work_status_history?.[0] || null;
+                    const imageUrl = getWorkOrderImageUrl(history?.image);
+                    const statusTitle = item.production_status_title || PRODUCTION_STATUSES.find((status) => status.value === statusValue)?.label || "Pending";
+
+                    return (
+                      <article className="qp-wo-card" key={item.qp_id || `${roomIndex}-${productIndex}`}>
+                        <h4 className="qp-wo-product">{item.product_name || `Product ${productIndex + 1}`}</h4>
+                        <span className="qp-wo-status">{statusTitle}</span>
+                        <p className="qp-wo-remark">{history?.remark?.trim() || "No work remark added."}</p>
+                        {imageUrl && (
+                          <a href={imageUrl} target="_blank" rel="noopener noreferrer">
+                            <img className="qp-wo-image" src={imageUrl} alt={`Work update for ${item.product_name || "product"}`} />
+                          </a>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </section>
+          </div>
+
+          {pdfChoiceOpen && (
+            <div className="qp-pdf-overlay" role="presentation" onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !generatingPdf) setPdfChoiceOpen(false);
+            }}>
+              <div className="qp-pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="qp-pdf-title">
+                <h2 id="qp-pdf-title">Choose what to download</h2>
+                <p>Select one document. The PDF will download directly to your device.</p>
+                {pdfError && <p className="qp-pdf-error">{pdfError}</p>}
+                <button disabled={generatingPdf} onClick={() => void downloadPdf("quotation")}>
+                  {generatingPdf ? "Preparing PDF…" : `${isInvoice ? "Invoice" : "Quotation"} only`}
+                </button>
+                <button disabled={generatingPdf} onClick={() => void downloadPdf("work-order")}>
+                  {generatingPdf ? "Preparing PDF…" : "Work Order"}
+                </button>
+                <button disabled={generatingPdf} onClick={() => void downloadPdf("both")}>
+                  {generatingPdf ? "Preparing PDF…" : `${isInvoice ? "Invoice" : "Quotation"} + Work Order`}
+                </button>
+                <button className="qp-pdf-cancel" disabled={generatingPdf} onClick={() => setPdfChoiceOpen(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
 
           {/* Screen footer */}
           <div className="qp-ft">

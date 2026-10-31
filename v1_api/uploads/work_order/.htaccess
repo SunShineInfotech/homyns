@@ -1,0 +1,5 @@
+<IfModule mod_headers.c>
+  <FilesMatch "\.(?i:jpg|jpeg|png|gif|webp|bmp)$">
+    Header always set Access-Control-Allow-Origin "*"
+  </FilesMatch>
+</IfModule>

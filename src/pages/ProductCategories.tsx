@@ -68,7 +68,7 @@ export default function ProductCategories() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   const getCompanyId = (): string => {
     try {

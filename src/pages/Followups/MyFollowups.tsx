@@ -19,6 +19,7 @@ import { followupService, Followup, FollowupFilters } from "@/services/followup.
 import { leadService, Lead } from "@/services/lead.service";
 import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
+import { getIndiaDate } from "@/lib/india-date";
 import {
   Search,
   Loader2,
@@ -51,8 +52,8 @@ export default function MyFollowups() {
   const [filterLeadId, setFilterLeadId] = useState<string>("");
   const [filterSource, setFilterSource] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>(() => getIndiaDate(-2));
+  const [endDate, setEndDate] = useState<string>(() => getIndiaDate());
   const [leadSearch, setLeadSearch] = useState<string>("");
   const [leadDropdownOpen, setLeadDropdownOpen] = useState(false);
 
@@ -176,8 +177,8 @@ export default function MyFollowups() {
     setFilterLeadId("");
     setFilterSource("");
     setFilterStatus("");
-    setStartDate("");
-    setEndDate("");
+    setStartDate(getIndiaDate(-2));
+    setEndDate(getIndiaDate());
     setLeadSearch("");
   };
 

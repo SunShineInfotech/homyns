@@ -8,10 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { companyService, Company } from "@/services/company.service";
+import { applyCompanyTheme } from "@/lib/company-theme";
 import { ArrowLeft, Save, Loader2, Upload, X, Building2, Phone, Mail, MapPin, Calendar, CreditCard, Globe } from "lucide-react";
 
-const EMPTY_FORM: Partial<Company> = {
+type CompanyFormData = Partial<Company> & { owner_password?: string };
+
+const EMPTY_FORM: CompanyFormData = {
   company_name: "",
+  owner_name: "",
   company_code: "",
   address: "",
   phone: "",
@@ -21,6 +25,8 @@ const EMPTY_FORM: Partial<Company> = {
   gst_number: "",
   company_expiry_date: "",
   website: "",
+  text_color: "#111827",
+  background_color: "#f5f7fa",
 };
 
 interface UserData {
@@ -44,7 +50,7 @@ export default function CompanyForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
-  const [formData, setFormData] = useState<Partial<Company>>(EMPTY_FORM);
+  const [formData, setFormData] = useState<CompanyFormData>(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -56,7 +62,7 @@ export default function CompanyForm() {
   const [userCompanyId, setUserCompanyId] = useState<string>("");
   const [accessDenied, setAccessDenied] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   const getCompanyId = (): string => {
     try {
@@ -120,6 +126,11 @@ export default function CompanyForm() {
             setFormData({
               company_id: response.data.company_id,
               company_name: response.data.company_name || "",
+              owner_name: response.data.owner_name || "",
+              owner_emp_id: response.data.owner_emp_id || "",
+              owner_employee_code: response.data.owner_employee_code || "",
+              employee_number: response.data.employee_number || "",
+              owner_password: "",
               company_code: response.data.company_code || "",
               address: response.data.address || "",
               phone: response.data.phone || "",
@@ -129,6 +140,8 @@ export default function CompanyForm() {
               gst_number: response.data.gst_number || "",
               company_expiry_date: response.data.company_expiry_date || "",
               website: response.data.website || "",
+              text_color: response.data.text_color || "#111827",
+              background_color: response.data.background_color || "#f5f7fa",
             });
             if (response.data.logo) {
               setExistingImage(response.data.logo);
@@ -243,6 +256,14 @@ export default function CompanyForm() {
       setFormError("Company code is required.");
       return;
     }
+    if (isAddMode && (!formData.owner_name?.trim() || !formData.owner_employee_code?.trim() || !formData.employee_number?.trim() || !formData.owner_password)) {
+      setFormError("Enter the owner name, employee code, employee number, and password.");
+      return;
+    }
+    if (formData.owner_password && formData.owner_password.length < 4) {
+      setFormError("Owner password must be at least 4 characters.");
+      return;
+    }
 
     setFormError("");
     setSaving(true);
@@ -251,6 +272,10 @@ export default function CompanyForm() {
       const formDataToSend = new FormData();
       formDataToSend.append('type', isEditMode ? '2' : '1');
       formDataToSend.append('company_name', formData.company_name!.trim());
+      formDataToSend.append('owner_name', formData.owner_name?.trim() || '');
+      formDataToSend.append('owner_employee_code', formData.owner_employee_code?.trim() || '');
+      formDataToSend.append('employee_number', formData.employee_number?.trim() || '');
+      if (formData.owner_password) formDataToSend.append('owner_password', formData.owner_password);
       formDataToSend.append('company_code', formData.company_code!.trim().toUpperCase());
       formDataToSend.append('address', formData.address?.trim() || '');
       formDataToSend.append('phone', formData.phone?.trim() || '');
@@ -260,6 +285,8 @@ export default function CompanyForm() {
       formDataToSend.append('gst_number', formData.gst_number?.trim() || '');
       formDataToSend.append('company_expiry_date', formData.company_expiry_date || '');
       formDataToSend.append('website', formData.website?.trim() || '');
+      formDataToSend.append('text_color', formData.text_color || '#111827');
+      formDataToSend.append('background_color', formData.background_color || '#f5f7fa');
 
       if (isEditMode && id) {
         formDataToSend.append('company_id', id);
@@ -278,6 +305,17 @@ export default function CompanyForm() {
       }
 
       if (res.status === "success") {
+        if (isEditMode && id === getCompanyId()) {
+          const nextCompany: any = {
+            ...JSON.parse(localStorage.getItem("company_data") || "{}"),
+            ...formData,
+            text_color: formData.text_color || "#111827",
+            background_color: formData.background_color || "#f5f7fa",
+          };
+          delete nextCompany.owner_password;
+          localStorage.setItem("company_data", JSON.stringify(nextCompany));
+          applyCompanyTheme(nextCompany);
+        }
         toast({ 
           title: "Success", 
           description: isEditMode ? "Company updated successfully" : "Company added successfully" 
@@ -345,7 +383,7 @@ export default function CompanyForm() {
       
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-card rounded-2xl border p-6 space-y-4">
-            {/* Company Name & Code */}
+            {/* Company and first employee account */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="company_name">
@@ -363,6 +401,60 @@ export default function CompanyForm() {
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <Label htmlFor="owner_name">Owner / Employee Name{(isAddMode || Boolean(formData.owner_emp_id)) && <span className="text-destructive"> *</span>}</Label>
+                <Input
+                  id="owner_name"
+                  value={formData.owner_name || ""}
+                  onChange={(e) => setFormData((p) => ({ ...p, owner_name: e.target.value }))}
+                  className="h-11 rounded-xl mt-1.5"
+                  placeholder="Enter owner or employee name"
+                  maxLength={150}
+                  required={isAddMode || Boolean(formData.owner_emp_id)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="owner_employee_code">Employee Code{(isAddMode || Boolean(formData.owner_emp_id)) && <span className="text-destructive"> *</span>}</Label>
+                <Input
+                  id="owner_employee_code"
+                  value={formData.owner_employee_code || ""}
+                  onChange={(e) => setFormData((p) => ({ ...p, owner_employee_code: e.target.value.toUpperCase() }))}
+                  className="h-11 rounded-xl mt-1.5 font-mono"
+                  placeholder="Enter login code"
+                  maxLength={50}
+                  required={isAddMode || Boolean(formData.owner_emp_id)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="employee_number">Employee Number{(isAddMode || Boolean(formData.owner_emp_id)) && <span className="text-destructive"> *</span>}</Label>
+                <Input
+                  id="employee_number"
+                  value={formData.employee_number || ""}
+                  onChange={(e) => setFormData((p) => ({ ...p, employee_number: e.target.value.toUpperCase() }))}
+                  className="h-11 rounded-xl mt-1.5 font-mono"
+                  placeholder="Enter employee number"
+                  maxLength={50}
+                  required={isAddMode || Boolean(formData.owner_emp_id)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="owner_password">Owner Password{isAddMode && <span className="text-destructive"> *</span>}</Label>
+                <Input
+                  id="owner_password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={formData.owner_password || ""}
+                  onChange={(e) => setFormData((p) => ({ ...p, owner_password: e.target.value }))}
+                  className="h-11 rounded-xl mt-1.5"
+                  placeholder={isEditMode ? "Leave blank to keep current password" : "At least 4 characters"}
+                  minLength={isAddMode ? 4 : undefined}
+                  required={isAddMode}
+                />
               </div>
 
               <div>
@@ -478,6 +570,38 @@ export default function CompanyForm() {
                     className="h-11 rounded-xl pl-10"
                     placeholder="https://example.com"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Company colors */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="background_color">Background Color</Label>
+                <div className="mt-1.5 flex items-center gap-3 rounded-xl border p-2">
+                  <input
+                    id="background_color"
+                    type="color"
+                    value={formData.background_color || "#f5f7fa"}
+                    onChange={(e) => setFormData((p) => ({ ...p, background_color: e.target.value }))}
+                    className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent p-0"
+                    aria-label="Choose background color"
+                  />
+                  <span className="text-sm font-mono">{formData.background_color || "#f5f7fa"}</span>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="text_color">Text Color</Label>
+                <div className="mt-1.5 flex items-center gap-3 rounded-xl border p-2">
+                  <input
+                    id="text_color"
+                    type="color"
+                    value={formData.text_color || "#111827"}
+                    onChange={(e) => setFormData((p) => ({ ...p, text_color: e.target.value }))}
+                    className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent p-0"
+                    aria-label="Choose text color"
+                  />
+                  <span className="text-sm font-mono">{formData.text_color || "#111827"}</span>
                 </div>
               </div>
             </div>

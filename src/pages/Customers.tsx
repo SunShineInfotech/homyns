@@ -46,6 +46,7 @@ import {
   Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 type SortKey = "client_name" | "phone1" | "client_email" | "state_name" | "city_name";
 type SortDir = "asc" | "desc";
@@ -82,6 +83,7 @@ const EMPTY_FORM: Partial<CustomerWithDetails> = {
 };
 
 export default function Customers() {
+  const navigate = useNavigate();
   /* ── data ─────────────────────────────────────────────────────── */
   const [customers, setCustomers] = useState<CustomerWithDetails[]>([]);
   const [states, setStates] = useState<State[]>([]);
@@ -537,6 +539,7 @@ export default function Customers() {
                         </span>
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground min-w-[200px]">Address</th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground min-w-[130px]">Wallet Balance</th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground w-28">Actions</th>
                     </tr>
                   </thead>
@@ -594,6 +597,11 @@ export default function Customers() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums">
+                          <Button variant="link" className="h-auto p-0 font-semibold tabular-nums" onClick={() => navigate(`/customers/${c.client_id}/transactions`)} title="View customer wallet transactions">
+                            ₹{(Number(c.wallet) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Button>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
@@ -681,6 +689,11 @@ export default function Customers() {
                       </div>
                     )}
                   </div>
+
+                  <button type="button" onClick={() => navigate(`/customers/${c.client_id}/transactions`)} className="flex w-full items-center justify-between rounded-xl bg-muted/40 px-3 py-2 text-sm hover:bg-primary/5" title="View customer wallet transactions">
+                    <span className="text-muted-foreground">Wallet Balance</span>
+                    <span className="font-semibold tabular-nums">₹{(Number(c.wallet) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </button>
 
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     {c.state_name && (

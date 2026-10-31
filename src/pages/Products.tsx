@@ -47,7 +47,7 @@ export default function Products() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'https://sunshineproduct.in/interior_designer/v1_api/';
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   const getCompanyId = (): string => {
     try {
@@ -254,6 +254,7 @@ export default function Products() {
                       </span>
                     </th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Qty Type</th>
+                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Stock</th>
                     <th
                       className="px-4 py-3 text-right font-medium text-muted-foreground cursor-pointer select-none"
                       onClick={() => toggleSort("price")}
@@ -276,6 +277,7 @@ export default function Products() {
                           {getQtyTypeLabel(p.qty_type || 'Fixed')}
                         </Badge>
                       </td>
+                      <td className="px-4 py-3 text-right font-medium">{Number(p.current_stock || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 })}</td>
                       <td className="px-4 py-3 text-right">
                         ₹{p.price?.toFixed(2) || '0.00'}
                       </td>
@@ -319,6 +321,7 @@ export default function Products() {
                     <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="outline" className="text-xs">{getQtyTypeLabel(p.qty_type || 'Fixed')}</Badge>
                       <span className="text-xs font-medium">₹{p.price?.toFixed(2) || '0.00'}</span>
+                      <span className="text-xs text-muted-foreground">Stock: {Number(p.current_stock || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 })}</span>
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">

@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import { followupService, Followup, FollowupFilters } from "@/services/followup.service";
 import { leadService, Lead } from "@/services/lead.service";
 import { employeeService, Employee } from "@/services/employee.service";
+import { getIndiaDate } from "@/lib/india-date";
 import {
   Search,
   Loader2,
@@ -52,8 +53,8 @@ export default function AllFollowups() {
   const [filterLeadId, setFilterLeadId] = useState<string>("");
   const [filterSource, setFilterSource] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>(() => getIndiaDate(-2));
+  const [endDate, setEndDate] = useState<string>(() => getIndiaDate());
   const [leadSearch, setLeadSearch] = useState<string>("");
   const [leadDropdownOpen, setLeadDropdownOpen] = useState(false);
 
@@ -193,8 +194,8 @@ export default function AllFollowups() {
     setFilterLeadId("");
     setFilterSource("");
     setFilterStatus("");
-    setStartDate("");
-    setEndDate("");
+    setStartDate(getIndiaDate(-2));
+    setEndDate(getIndiaDate());
   };
 
   const getModeIcon = (mode?: string) => {

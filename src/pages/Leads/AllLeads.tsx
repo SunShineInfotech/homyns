@@ -29,6 +29,7 @@ import { leadService, Lead } from "@/services/lead.service";
 import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
 import { employeeService, Employee } from "@/services/employee.service";
+import { getIndiaDate } from "@/lib/india-date";
 import {
   Plus,
   Search,
@@ -78,14 +79,8 @@ export default function AllLeads() {
   const [filterSource, setFilterSource] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterEmployee, setFilterEmployee] = useState<string>("");
-  const [fromDate, setFromDate] = useState<string>(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 14);
-    return date.toISOString().split("T")[0];
-  });
-  const [toDate, setToDate] = useState<string>(() => {
-    return new Date().toISOString().split("T")[0];
-  });
+  const [fromDate, setFromDate] = useState<string>(() => getIndiaDate(-2));
+  const [toDate, setToDate] = useState<string>(() => getIndiaDate());
   // Track if customer search is active
   const [isCustomerSearchActive, setIsCustomerSearchActive] = useState(false);
 
@@ -364,10 +359,8 @@ export default function AllLeads() {
     setFilterSource("");
     setFilterStatus("");
     setFilterEmployee("");
-    const date = new Date();
-    date.setDate(date.getDate() - 14);
-    setFromDate(date.toISOString().split("T")[0]);
-    setToDate(new Date().toISOString().split("T")[0]);
+    setFromDate(getIndiaDate(-2));
+    setToDate(getIndiaDate());
     clearCustomerSearch();
   };
 

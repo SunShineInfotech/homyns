@@ -867,16 +867,12 @@ export default function StepItems() {
       setAllRooms(allSavedRooms);
 
       // Get selected room IDs from StepRooms (rooms that were selected in StepRooms)
-      const selectedRoomIdsFromSave = allSavedRooms
-        .filter((room: any) => room.selected === true)
-        .map((room: any) => room.id);
-
-      // If no rooms were selected in StepRooms, use the first room as default
-      const roomIds = selectedRoomIdsFromSave.length > 0
-        ? selectedRoomIdsFromSave
-        : allSavedRooms.length > 0
-          ? [allSavedRooms[0].id]
-          : [];
+      const roomsHaveSelection = allSavedRooms.some((room: any) => room.selected !== undefined);
+      // All package rooms start selected. Respect an explicit user selection,
+      // including when they intentionally deselect every room.
+      const roomIds = roomsHaveSelection
+        ? allSavedRooms.filter((room: any) => room.selected === true).map((room: any) => room.id)
+        : allSavedRooms.map((room: any) => room.id);
 
       setSelectedRoomIds(roomIds);
 
@@ -1055,6 +1051,9 @@ export default function StepItems() {
     calculateTotalMeasureStatic(item);
 
   const updateRoomItem = (roomId: string, itemId: string, updates: any) => {
+    if (Object.prototype.hasOwnProperty.call(updates, "quantity")) {
+      window.dispatchEvent(new CustomEvent("quotation-item-quantity-dirty", { detail: true }));
+    }
     setRooms((prev) =>
       prev.map((room) => {
         if (room.id !== roomId) return room;
@@ -1306,6 +1305,8 @@ export default function StepItems() {
 
   const handleNext = () => {
     const latestRooms = rooms;
+
+    window.dispatchEvent(new CustomEvent("quotation-item-quantity-dirty", { detail: false }));
 
     saveQuotationData({
       rooms: latestRooms,
