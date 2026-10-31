@@ -1,9 +1,16 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, AlertCircle, Printer, Layers } from "lucide-react";
-import html2pdf from "html2pdf.js";
+import { Loader2, AlertCircle, Printer } from "lucide-react";
+// html2canvas + jsPDF are already installed as dependencies of html2pdf.js.
+// They are used directly so the full 900px document is captured (html2pdf
+// placed it inside an A4-width box, which cut off the right side).
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { quotationService } from "@/services/quotation.service";
-import { quotationStatusService, QuotationStatusHistory } from "@/services/quotation-status.service";
+import {
+  quotationStatusService,
+  QuotationStatusHistory,
+} from "@/services/quotation-status.service";
 import { termsService } from "@/services/terms.service";
 import { companyService } from "@/services/company.service";
 import { API_URL } from "@/services/api.config";
@@ -98,18 +105,116 @@ const getCompanyLogoUrl = (logo?: string) => {
   return new URL(`../uploadfiles/company/${logoPath}`, apiBaseUrl).toString();
 };
 
+// ─── PDF export settings ────────────────────────────────────────────────────
+const PDF_RENDER_WIDTH = 900; // CSS px the document is laid out at
+const PDF_PAGE = { w: 210, h: 297 }; // A4 in mm
+const PDF_MARGIN = 8; // mm on every side
+const PDF_FOOTER_SPACE = 5; // mm reserved at the bottom for "Page x of y"
+
+// Blocks that should never be split across two pages
+const PDF_KEEP_TOGETHER = [
+  ".qp-hd",
+  ".qp-meta",
+  ".qp-cl",
+  ".qp-tbl thead tr",
+  ".qp-tbl tfoot tr",
+  ".qp-tot",
+  ".qp-tm > .qp-ey",
+  ".qp-tmi",
+  ".qp-sg",
+  ".qp-wo-title",
+  ".qp-wo-card",
+].join(",");
+
+type PdfBlock = { top: number; bottom: number };
+
+/** Measure every keep-together block, relative to the top of the exported element. */
+const measurePdfBlocks = (element: HTMLElement): PdfBlock[] => {
+  const base = element.getBoundingClientRect().top;
+  const toBlock = (first: Element, last: Element = first): PdfBlock => ({
+    top: first.getBoundingClientRect().top - base,
+    bottom: last.getBoundingClientRect().bottom - base,
+  });
+
+  const blocks: PdfBlock[] = [];
+  element
+    .querySelectorAll(PDF_KEEP_TOGETHER)
+    .forEach((node) => blocks.push(toBlock(node)));
+
+  // Each product = name row + value row (+ room heading row when it is the first item)
+  element.querySelectorAll(".qp-tbl tr.nr").forEach((nameRow) => {
+    const next = nameRow.nextElementSibling;
+    const valueRow = next && next.classList.contains("vr") ? next : nameRow;
+    const prev = nameRow.previousElementSibling;
+    const start = prev && prev.classList.contains("rr") ? prev : nameRow;
+    blocks.push(toBlock(start, valueRow));
+  });
+
+  // Room heading + its products in the work-order section
+  element.querySelectorAll(".qp-wo-room").forEach((roomTitle) => {
+    const firstCard =
+      roomTitle.nextElementSibling?.querySelector(".qp-wo-card");
+    blocks.push(toBlock(roomTitle, firstCard || roomTitle));
+  });
+
+  return blocks.filter((b) => b.bottom > b.top);
+};
+
+/** Choose page break positions (in CSS px) that do not cut through any block. */
+const getPdfPageBreaks = (
+  totalHeight: number,
+  pageHeight: number,
+  blocks: PdfBlock[],
+): number[] => {
+  const breaks: number[] = [];
+  let start = 0;
+  const minFill = pageHeight * 0.3; // never leave a page less than 30% filled
+
+  while (start + pageHeight < totalHeight) {
+    let cut = start + pageHeight;
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const block of blocks) {
+        if (
+          block.top < cut &&
+          block.bottom > cut &&
+          block.top > start + minFill
+        ) {
+          cut = block.top;
+          moved = true;
+        }
+      }
+    }
+    breaks.push(cut);
+    start = cut;
+  }
+  return breaks;
+};
+
+const nextFrame = () =>
+  new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
 const imageToDataUrl = (imageUrl: string): Promise<string> =>
   fetch(imageUrl, { mode: "cors", credentials: "omit" })
     .then((response) => {
       if (!response.ok) throw new Error("Image request failed");
       return response.blob();
     })
-    .then((blob) => new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Image conversion failed"));
-      reader.onerror = () => reject(new Error("Image conversion failed"));
-      reader.readAsDataURL(blob);
-    }));
+    .then(
+      (blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () =>
+            typeof reader.result === "string"
+              ? resolve(reader.result)
+              : reject(new Error("Image conversion failed"));
+          reader.onerror = () => reject(new Error("Image conversion failed"));
+          reader.readAsDataURL(blob);
+        }),
+    );
 
 // ─── Legacy calculated qty/label helper (kept untouched — used elsewhere) ───
 function getQtyInfo(item: any) {
@@ -158,8 +263,10 @@ function getPrintDisplayInfo(item: any) {
 
   const w = item.width ?? "";
   const h = item.height ?? "";
-  const wVal = w !== "" && Number.isFinite(parseFloat(w)) ? parseFloat(w).toFixed(2) : "";
-  const hVal = h !== "" && Number.isFinite(parseFloat(h)) ? parseFloat(h).toFixed(2) : "";
+  const wVal =
+    w !== "" && Number.isFinite(parseFloat(w)) ? parseFloat(w).toFixed(2) : "";
+  const hVal =
+    h !== "" && Number.isFinite(parseFloat(h)) ? parseFloat(h).toFixed(2) : "";
 
   const measureRaw = item.calculated_qty ?? item.qty ?? 0;
   const measure = Number.isFinite(parseFloat(measureRaw))
@@ -172,43 +279,6 @@ function getPrintDisplayInfo(item: any) {
   return { per, wVal, hVal, measure, rate, amount, isFixed };
 }
 
-// Inline SVG icons
-const PhoneIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.02 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
-  </svg>
-);
-const MailIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M4 4h16c1.1 0 2 .9 2 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6c0-1.1.9-2 2-2z" />
-    <polyline points="22,6 12,13 2,6" />
-  </svg>
-);
-const PinIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z" />
-    <circle cx="12" cy="10" r="3" />
-  </svg>
-);
-const WaIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-  </svg>
-);
-const HashIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M3 9h18M9 21V9" />
-  </svg>
-);
-const GlobeIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="2" y1="12" x2="22" y2="12" />
-    <path d="M12 2a15.3 15.3 0 010 20 15.3 15.3 0 010-20z" />
-  </svg>
-);
-
 // Helper to get company color (falls back to the standard brand red)
 const getCompanyColor = (): string => {
   try {
@@ -217,7 +287,7 @@ const getCompanyColor = (): string => {
       const parsed = JSON.parse(data);
       return parsed.background_color || "#ee3c31";
     }
-  } catch { }
+  } catch {}
   return "#ee3c31";
 };
 
@@ -245,15 +315,18 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 
 /* HEADER — mirrors the reference PDF grid: logo/web left, EM/MO right */
 .qp-hd{display:grid;grid-template-columns:auto 1fr auto;gap:18px;padding:22px 28px;align-items:center;border-bottom:2px solid var(--company-color, #ee3c31);}
-.qp-logo{width:64px;height:64px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;border-radius:6px;background:var(--company-color, #ee3c31);overflow:hidden;}
-.qp-logo img{width:100%;height:100%;object-fit:contain;display:block;}
+/* Logo: no object-fit (html2canvas ignores it and stretches the image).
+   The image keeps its own aspect ratio via max-width / max-height + auto size. */
+.qp-logo{height:64px;min-width:64px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;border-radius:6px;background:var(--company-color, #ee3c31);overflow:hidden;}
+.qp-logo:not(.has-img){width:64px;}
+.qp-logo.has-img{background:transparent!important;border-radius:0;justify-content:flex-start;}
+.qp-logo img{display:block;width:auto;height:auto;max-height:64px;max-width:180px;}
 .qp-co-name{font-size:20px;font-weight:800;color:#1a1a1a;line-height:1.2;}
 .qp-co-addr{font-size:11px;color:#555;margin-top:4px;max-width:320px;}
 .qp-hd-right{text-align:left;display:flex;flex-direction:column;gap:5px;}
-.qp-hd-row{display:flex;align-items:baseline;gap:6px;font-size:11.5px;color:#222;white-space:nowrap;}
-.qp-hd-row b{font-weight:800;color:#1a1a1a;letter-spacing:.03em;}
-.qp-hd-row span.val{color:#333;}
-.qp-hd-row svg{color:var(--company-color, #ee3c31);flex-shrink:0;}
+.qp-hd-row{display:flex;align-items:center;gap:6px;font-size:11.5px;line-height:16px;color:#222;white-space:nowrap;}
+.qp-hd-row b{font-weight:800;color:#1a1a1a;letter-spacing:.03em;line-height:16px;}
+.qp-hd-row span.val{color:#333;line-height:16px;}
 
 /* Quotation meta strip */
 .qp-meta{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:14px 28px;border-bottom:1px solid #e2e8f0;background:#fafafa;}
@@ -296,8 +369,13 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 .in{font-weight:600;color:#1a1a1a;font-size:13px;}
 .irm{font-size:11px;color:#94a3b8;font-style:italic;margin-top:2px;}
 .isp{display:inline-block;font-size:10px;background:#fef3c7;color:#d97706;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-top:3px;font-weight:600;}
-.irml{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;margin-bottom:4px;}
-.irmlb{display:inline-flex;align-items:center;gap:3px;font-size:10px;background:#f1f5f9;color:#64748b;border-radius:4px;padding:2px 7px;}
+/* Raw materials: one clean text line (no pill backgrounds — html2canvas
+   draws text slightly lower than the box, which made pills look misaligned) */
+.irml{display:block;margin-top:4px;margin-bottom:2px;font-size:10.5px;line-height:1.6;color:#64748b;}
+.irml-label{font-weight:700;color:#475569;margin-right:4px;}
+.irmlb{display:inline;}
+.irmlb b{font-weight:600;color:#475569;}
+.irml-sep{color:#94a3b8;padding:0 6px;}
 .tc{text-align:center;}.tr{text-align:right;}.tm{font-family:monospace;}
 
 /* Table footer TOTAL row — mirrors the PDF's bottom total bar */
@@ -384,7 +462,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 @media(max-width:480px){
   .qp-wrap{padding:12px 6px 20px;}
   .qp-hd{padding:14px 12px;}
-  .qp-logo{width:48px;height:48px;font-size:15px;}
+  .qp-logo{height:48px;min-width:48px;font-size:15px;}
+  .qp-logo:not(.has-img){width:48px;}
+  .qp-logo img{max-height:48px;max-width:140px;}
   .qp-co-name{font-size:15px;}
   .qp-cl{padding:12px 12px;}
   .qp-clg{grid-template-columns:1fr;gap:8px;}
@@ -415,7 +495,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 html.qp-export-desktop .qp-wrap{max-width:900px!important;padding:24px 16px 40px!important;}
 html.qp-export-desktop .qp-hd{grid-template-columns:auto 1fr auto!important;gap:18px!important;padding:22px 28px!important;}
 html.qp-export-desktop .qp-hd-right{align-items:flex-start!important;}
-html.qp-export-desktop .qp-logo{width:64px!important;height:64px!important;font-size:20px!important;}
+html.qp-export-desktop .qp-logo{height:64px!important;min-width:64px!important;font-size:20px!important;}
+html.qp-export-desktop .qp-logo:not(.has-img){width:64px!important;}
+html.qp-export-desktop .qp-logo img{max-height:64px!important;max-width:180px!important;}
 html.qp-export-desktop .qp-co-name{font-size:20px!important;}
 html.qp-export-desktop .qp-cl{padding:16px 28px!important;}
 html.qp-export-desktop .qp-clg{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important;}
@@ -445,7 +527,9 @@ html.qp-export-desktop .qp-wo-grid{grid-template-columns:repeat(2,minmax(0,1fr))
   .qp-tbl tr.nr{page-break-after:avoid;}
   .qp-hd{padding:10px 14px!important;}
   .qp-co-name{font-size:16px!important;}
-  .qp-logo{width:48px!important;height:48px!important;font-size:14px!important;}
+  .qp-logo{height:48px!important;min-width:48px!important;font-size:14px!important;}
+  .qp-logo:not(.has-img){width:48px!important;}
+  .qp-logo img{max-height:48px!important;max-width:140px!important;}
   .qp-cl{padding:8px 14px!important;}
   .qp-meta{padding:8px 14px!important;}
   .qp-tot{padding:10px 14px!important;}
@@ -461,7 +545,11 @@ html.qp-export-desktop .qp-wo-grid{grid-template-columns:repeat(2,minmax(0,1fr))
 @keyframes spin{to{transform:rotate(360deg);}}
 `;
 
-export default function PublicQuotationView({ documentType = "quotation" }: { documentType?: "quotation" | "invoice" }) {
+export default function PublicQuotationView({
+  documentType = "quotation",
+}: {
+  documentType?: "quotation" | "invoice";
+}) {
   const isInvoice = documentType === "invoice";
   const { id } = useParams();
   const [quotation, setQuotation] = useState<any>(null);
@@ -473,13 +561,14 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
   const [pdfChoiceOpen, setPdfChoiceOpen] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
-  const [invoiceHistory, setInvoiceHistory] = useState<QuotationStatusHistory | null>(null);
+  const [invoiceHistory, setInvoiceHistory] =
+    useState<QuotationStatusHistory | null>(null);
 
   const getCompanyId = (): string => {
     try {
       const r = localStorage.getItem("company_data");
       if (r) return JSON.parse(r)?.company_id || "";
-    } catch { }
+    } catch {}
     return "";
   };
 
@@ -487,7 +576,7 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
   useEffect(() => {
     const color = getCompanyColor();
     setCompanyColor(color);
-    document.documentElement.style.setProperty('--company-color', color);
+    document.documentElement.style.setProperty("--company-color", color);
   }, []);
 
   useEffect(() => {
@@ -514,9 +603,14 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
           if (cid) {
             if (isInvoice) {
               try {
-                const invoiceResult = await quotationStatusService.getLatestInvoiceGenerated(id, String(cid));
-                if (invoiceResult.status === "success" && invoiceResult.data) setInvoiceHistory(invoiceResult.data);
-              } catch { }
+                const invoiceResult =
+                  await quotationStatusService.getLatestInvoiceGenerated(
+                    id,
+                    String(cid),
+                  );
+                if (invoiceResult.status === "success" && invoiceResult.data)
+                  setInvoiceHistory(invoiceResult.data);
+              } catch {}
             }
             try {
               const cr = await companyService.getCompany(cid);
@@ -524,14 +618,17 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
                 setCompany(cr.data);
                 if (cr.data.background_color) {
                   setCompanyColor(cr.data.background_color);
-                  document.documentElement.style.setProperty('--company-color', cr.data.background_color);
+                  document.documentElement.style.setProperty(
+                    "--company-color",
+                    cr.data.background_color,
+                  );
                 }
               }
-            } catch { }
+            } catch {}
             try {
               const tr = await termsService.getTerms(cid);
               if (tr.status === "success" && tr.data) setTerms(tr.data);
-            } catch { }
+            } catch {}
           }
         } else {
           setError(res.message || "Failed to load");
@@ -548,17 +645,28 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
   useEffect(() => {
     if (!quotation) return;
 
-    const metaCompanyName = company?.company_name || quotation.company_name || "Interior Design Company";
-    const quotationNumber = quotation.quotation_number || String(quotation.quotation_id || "");
+    const metaCompanyName =
+      company?.company_name ||
+      quotation.company_name ||
+      "Interior Design Company";
+    const quotationNumber =
+      quotation.quotation_number || String(quotation.quotation_id || "");
     const documentLabel = isInvoice ? "Invoice" : "Quotation";
     const title = `${metaCompanyName} | ${documentLabel} ${quotationNumber}`;
     const description = `${metaCompanyName} ${documentLabel.toLowerCase()} ${quotationNumber}. View ${documentLabel.toLowerCase()} details and product-wise work status.`;
-    const logo = getCompanyLogoUrl(company?.logo || quotation.logo || quotation.company_logo || "");
+    const logo = getCompanyLogoUrl(
+      company?.logo || quotation.logo || quotation.company_logo || "",
+    );
     const previousTitle = document.title;
     const restore: Array<() => void> = [];
     document.title = title;
 
-    const upsertHeadTag = (selector: string, tagName: "meta" | "link", attribute: string, value: string) => {
+    const upsertHeadTag = (
+      selector: string,
+      tagName: "meta" | "link",
+      attribute: string,
+      value: string,
+    ) => {
       let element = document.head.querySelector<HTMLElement>(selector);
       const wasCreated = !element;
       if (!element) {
@@ -575,17 +683,52 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
     };
 
     upsertHeadTag('meta[name="description"]', "meta", "content", description);
-    upsertHeadTag('meta[name="keywords"]', "meta", "content", `${metaCompanyName}, ${documentLabel.toLowerCase()}, interior design`);
+    upsertHeadTag(
+      'meta[name="keywords"]',
+      "meta",
+      "content",
+      `${metaCompanyName}, ${documentLabel.toLowerCase()}, interior design`,
+    );
     upsertHeadTag('meta[name="author"]', "meta", "content", metaCompanyName);
     upsertHeadTag('meta[property="og:type"]', "meta", "content", "website");
-    upsertHeadTag('meta[property="og:url"]', "meta", "content", window.location.href);
+    upsertHeadTag(
+      'meta[property="og:url"]',
+      "meta",
+      "content",
+      window.location.href,
+    );
     upsertHeadTag('meta[property="og:title"]', "meta", "content", title);
-    upsertHeadTag('meta[property="og:description"]', "meta", "content", description);
-    upsertHeadTag('meta[property="og:site_name"]', "meta", "content", metaCompanyName);
-    upsertHeadTag('meta[name="twitter:card"]', "meta", "content", "summary_large_image");
+    upsertHeadTag(
+      'meta[property="og:description"]',
+      "meta",
+      "content",
+      description,
+    );
+    upsertHeadTag(
+      'meta[property="og:site_name"]',
+      "meta",
+      "content",
+      metaCompanyName,
+    );
+    upsertHeadTag(
+      'meta[name="twitter:card"]',
+      "meta",
+      "content",
+      "summary_large_image",
+    );
     upsertHeadTag('meta[name="twitter:title"]', "meta", "content", title);
-    upsertHeadTag('meta[name="twitter:description"]', "meta", "content", description);
-    upsertHeadTag('link[rel="canonical"]', "link", "href", window.location.href);
+    upsertHeadTag(
+      'meta[name="twitter:description"]',
+      "meta",
+      "content",
+      description,
+    );
+    upsertHeadTag(
+      'link[rel="canonical"]',
+      "link",
+      "href",
+      window.location.href,
+    );
     upsertHeadTag('meta[name="theme-color"]', "meta", "content", companyColor);
     if (logo) {
       upsertHeadTag('meta[property="og:image"]', "meta", "content", logo);
@@ -604,10 +747,34 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
     return (
       <>
         <style>{CSS}</style>
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#e9edf1" }}>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#e9edf1",
+          }}
+        >
           <div style={{ textAlign: "center" }}>
-            <Loader2 style={{ width: 40, height: 40, animation: "spin 1s linear infinite", color: companyColor, margin: "0 auto 12px" }} />
-            <p style={{ color: "#64748b", fontSize: 14, fontFamily: "Inter,system-ui,sans-serif" }}>Loading {isInvoice ? "invoice" : "quotation"}…</p>
+            <Loader2
+              style={{
+                width: 40,
+                height: 40,
+                animation: "spin 1s linear infinite",
+                color: companyColor,
+                margin: "0 auto 12px",
+              }}
+            />
+            <p
+              style={{
+                color: "#64748b",
+                fontSize: 14,
+                fontFamily: "Inter,system-ui,sans-serif",
+              }}
+            >
+              Loading {isInvoice ? "invoice" : "quotation"}…
+            </p>
           </div>
         </div>
       </>
@@ -617,16 +784,65 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
     return (
       <>
         <style>{CSS}</style>
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#e9edf1", padding: "20px" }}>
-          <div style={{ textAlign: "center", maxWidth: 360, fontFamily: "Inter,system-ui,sans-serif" }}>
-            <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-              <AlertCircle style={{ width: 36, height: 36, color: "#ef4444" }} />
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#e9edf1",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              textAlign: "center",
+              maxWidth: 360,
+              fontFamily: "Inter,system-ui,sans-serif",
+            }}
+          >
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                background: "#fee2e2",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px",
+              }}
+            >
+              <AlertCircle
+                style={{ width: 36, height: 36, color: "#ef4444" }}
+              />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>{isInvoice ? "Invoice" : "Quotation"} Not Found</h2>
-            <p style={{ color: "#64748b", fontSize: 14, marginBottom: 20 }}>{error || `This ${isInvoice ? "invoice" : "quotation"} doesn't exist.`}</p>
+            <h2
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: "#1a1a1a",
+                marginBottom: 8,
+              }}
+            >
+              {isInvoice ? "Invoice" : "Quotation"} Not Found
+            </h2>
+            <p style={{ color: "#64748b", fontSize: 14, marginBottom: 20 }}>
+              {error ||
+                `This ${isInvoice ? "invoice" : "quotation"} doesn't exist.`}
+            </p>
             <button
               onClick={() => (window.location.href = "/")}
-              style={{ background: companyColor, color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}
+              style={{
+                background: companyColor,
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                padding: "10px 24px",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: 14,
+              }}
             >
               Go Home
             </button>
@@ -642,10 +858,16 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
   const cWA = company?.whatsapp_number || quotation.whatsapp_number || "";
   const cGst = company?.gst_number || quotation.gst_number || "";
   const cWebsite = company?.website || quotation.company_website || "";
-  const cLogo = getCompanyLogoUrl(company?.logo || quotation.logo || quotation.company_logo || "");
+  const cLogo = getCompanyLogoUrl(
+    company?.logo || quotation.logo || quotation.company_logo || "",
+  );
 
-  const custName = quotation.client_name || quotation.customer_name || "Customer";
-  const custPhone = [quotation?.phone1, quotation?.phone2, quotation?.mobile].filter(Boolean).join(", ") || "—";
+  const custName =
+    quotation.client_name || quotation.customer_name || "Customer";
+  const custPhone =
+    [quotation?.phone1, quotation?.phone2, quotation?.mobile]
+      .filter(Boolean)
+      .join(", ") || "—";
   const custEmail = quotation.email || quotation.client_email || "";
   const custAddr = quotation.address || quotation.client_address || "";
 
@@ -666,10 +888,16 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
   const afterDisc = subtotal - discAmt;
 
   const qDate = quotation.c_date ? new Date(quotation.c_date) : new Date();
-  const quotationDateLabel = qDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
-  const invoiceDateValue = quotation.invoice_generated_at || (invoiceHistory?.c_date
-    ? `${invoiceHistory.c_date.slice(0, 10)} ${invoiceHistory.c_time || ""}`.trim()
-    : "");
+  const quotationDateLabel = qDate.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const invoiceDateValue =
+    quotation.invoice_generated_at ||
+    (invoiceHistory?.c_date
+      ? `${invoiceHistory.c_date.slice(0, 10)} ${invoiceHistory.c_time || ""}`.trim()
+      : "");
   const invoiceDateLabel = invoiceDateValue
     ? `${new Date(`${invoiceDateValue.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}${invoiceDateValue.length > 10 ? ` · ${invoiceDateValue.slice(11, 16)} IST` : ""}`
     : "—";
@@ -687,22 +915,27 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
   });
 
   const downloadPdf = async (kind: "quotation" | "work-order" | "both") => {
-    const selector = kind === "quotation"
-      ? ".qp-doc"
-      : kind === "work-order"
-        ? ".qp-work-order-page"
-        : ".qp-pdf-bundle";
+    const selector =
+      kind === "quotation"
+        ? ".qp-doc"
+        : kind === "work-order"
+          ? ".qp-work-order-page"
+          : ".qp-pdf-bundle";
     const element = document.querySelector<HTMLElement>(selector);
     if (!element) return;
 
     setGeneratingPdf(true);
-    const originalImageSources: Array<{ image: HTMLImageElement; src: string }> = [];
+    const originalImageSources: Array<{
+      image: HTMLImageElement;
+      src: string;
+    }> = [];
     const originalElementStyle = element.getAttribute("style");
+    const previousScroll = { x: window.scrollX, y: window.scrollY };
     document.documentElement.classList.add("qp-export-desktop");
     try {
       // Keep export layout identical on mobile and desktop: use the same
       // 900px document width and render CSS as a desktop-sized viewport.
-      element.style.width = "900px";
+      element.style.width = `${PDF_RENDER_WIDTH}px`;
       element.style.maxWidth = "none";
       element.style.marginLeft = "auto";
       element.style.marginRight = "auto";
@@ -711,61 +944,180 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
       // actual visible page content. Restore their original URLs afterwards.
       const images = Array.from(element.querySelectorAll("img"));
       const inaccessibleExternalImages: string[] = [];
-      await Promise.all(images.map(async (image) => {
-        const source = image.currentSrc || image.src;
-        if (!source || source.startsWith("data:")) return;
-        try {
-          const dataUrl = await imageToDataUrl(source);
-          originalImageSources.push({ image, src: image.getAttribute("src") || source });
-          image.src = dataUrl;
-        } catch {
+      await Promise.all(
+        images.map(async (image) => {
+          const source = image.currentSrc || image.src;
+          if (!source || source.startsWith("data:")) return;
           try {
-            if (new URL(source).origin !== window.location.origin) {
+            const dataUrl = await imageToDataUrl(source);
+            originalImageSources.push({
+              image,
+              src: image.getAttribute("src") || source,
+            });
+            image.src = dataUrl;
+          } catch {
+            try {
+              if (new URL(source).origin !== window.location.origin) {
+                inaccessibleExternalImages.push(source);
+              }
+            } catch {
               inaccessibleExternalImages.push(source);
             }
-          } catch {
-            inaccessibleExternalImages.push(source);
           }
-        }
-        try {
-          await image.decode();
-        } catch {
-          // Keep generating the PDF if an optional product image is unavailable.
-        }
-      }));
+          try {
+            await image.decode();
+          } catch {
+            // Keep generating the PDF if an optional product image is unavailable.
+          }
+        }),
+      );
       if (inaccessibleExternalImages.length > 0) {
-        throw new Error("The image server is blocking PDF access. Enable CORS for the company logo and work-order upload folders, then try again.");
+        throw new Error(
+          "The image server is blocking PDF access. Enable CORS for the company logo and work-order upload folders, then try again.",
+        );
       }
 
-      const safeQuotationNumber = String(quotation.quotation_number || quotation.id || "quotation")
-        .replace(/[^a-z0-9_-]+/gi, "_");
+      const safeQuotationNumber = String(
+        quotation.quotation_number || quotation.id || "quotation",
+      ).replace(/[^a-z0-9_-]+/gi, "_");
       const documentName = isInvoice ? "Invoice" : "Quotation";
-      const title = kind === "quotation" ? documentName : kind === "work-order" ? "Work_Order" : `${documentName}_and_Work_Order`;
-      await html2pdf()
-        .set({
-          margin: 8,
-          filename: `${title}_${safeQuotationNumber}.pdf`,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-            logging: false,
-            windowWidth: 1200,
-          },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        })
-        .from(element)
-        .save();
+      const title =
+        kind === "quotation"
+          ? documentName
+          : kind === "work-order"
+            ? "Work_Order"
+            : `${documentName}_and_Work_Order`;
+
+      // Let the 900px desktop layout and web fonts settle before measuring
+      window.scrollTo(0, 0);
+      await nextFrame();
+      if ((document as any).fonts?.ready) await (document as any).fonts.ready;
+
+      await nextFrame();
+
+      const cssWidth = element.offsetWidth;
+      const cssHeight = element.scrollHeight;
+      const blocks = measurePdfBlocks(element);
+
+      // Scale 2 for sharp text, reduced for very long documents so the canvas
+      // stays inside mobile browser limits (iOS Safari ≈ 16.7M pixels).
+      const scale = Math.max(
+        1,
+        Math.min(
+          2,
+          Math.sqrt(15_000_000 / (cssWidth * cssHeight)),
+          32000 / cssHeight,
+        ),
+      );
+
+      const canvas = await html2canvas(element, {
+        scale,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: 1200,
+        width: cssWidth,
+        height: cssHeight,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      // Fit the full document width into the A4 printable width
+      const contentWidthMm = PDF_PAGE.w - PDF_MARGIN * 2;
+      const contentHeightMm = PDF_PAGE.h - PDF_MARGIN * 2 - PDF_FOOTER_SPACE;
+      const cssPxPerMm = cssWidth / contentWidthMm;
+      const pageHeightCss = contentHeightMm * cssPxPerMm;
+      const canvasPxPerCss = canvas.width / cssWidth;
+
+      const breaks = getPdfPageBreaks(cssHeight, pageHeightCss, blocks);
+      const slices = [0, ...breaks, cssHeight];
+
+      const pdf = new jsPDF({
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+        compress: true,
+      });
+      const pageCanvas = document.createElement("canvas");
+      const pageCtx = pageCanvas.getContext("2d");
+      if (!pageCtx)
+        throw new Error("Could not create the PDF. Please try again.");
+
+      for (let i = 0; i < slices.length - 1; i++) {
+        const fromCss = slices[i];
+        const toCss = slices[i + 1];
+        const sourceY = Math.round(fromCss * canvasPxPerCss);
+        const sourceH = Math.max(
+          1,
+          Math.min(
+            canvas.height - sourceY,
+            Math.round((toCss - fromCss) * canvasPxPerCss),
+          ),
+        );
+
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sourceH;
+        pageCtx.fillStyle = "#ffffff";
+        pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        pageCtx.drawImage(
+          canvas,
+          0,
+          sourceY,
+          canvas.width,
+          sourceH,
+          0,
+          0,
+          canvas.width,
+          sourceH,
+        );
+
+        if (i > 0) pdf.addPage();
+        pdf.addImage(
+          pageCanvas.toDataURL("image/jpeg", 0.95),
+          "JPEG",
+          PDF_MARGIN,
+          PDF_MARGIN,
+          contentWidthMm,
+          sourceH / canvasPxPerCss / cssPxPerMm,
+          undefined,
+          "FAST",
+        );
+      }
+
+      // Page numbers
+      const totalPages = pdf.getNumberOfPages();
+      if (totalPages > 1) {
+        for (let page = 1; page <= totalPages; page++) {
+          pdf.setPage(page);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(8);
+          pdf.setTextColor(148, 163, 184);
+          pdf.text(
+            `Page ${page} of ${totalPages}`,
+            PDF_PAGE.w / 2,
+            PDF_PAGE.h - 4,
+            { align: "center" },
+          );
+        }
+      }
+
+      pdf.save(`${title}_${safeQuotationNumber}.pdf`);
       setPdfChoiceOpen(false);
     } catch (downloadError) {
       console.error("PDF download failed:", downloadError);
-      setPdfError(downloadError instanceof Error ? downloadError.message : "Could not create the PDF. Please try again.");
+      setPdfError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Could not create the PDF. Please try again.",
+      );
     } finally {
-      originalImageSources.forEach(({ image, src }) => { image.src = src; });
+      originalImageSources.forEach(({ image, src }) => {
+        image.src = src;
+      });
       if (originalElementStyle === null) element.removeAttribute("style");
       else element.setAttribute("style", originalElementStyle);
       document.documentElement.classList.remove("qp-export-desktop");
+      window.scrollTo(previousScroll.x, previousScroll.y);
       setGeneratingPdf(false);
     }
   };
@@ -780,7 +1132,8 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
     );
     g.items.forEach((item, ii) => {
       sr++;
-      const { per, wVal, hVal, measure, rate, amount, isFixed } = getPrintDisplayInfo(item);
+      const { per, wVal, hVal, measure, rate, amount, isFixed } =
+        getPrintDisplayInfo(item);
       const qty = parseFloat(item.qty) || 1;
       // Raw materials are only shown when an item actually has them —
       // otherwise the row falls back purely to the PDF-style layout.
@@ -794,12 +1147,12 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
             {item.is_special === "1" && <span className="isp">Special</span>}
             {rm.length > 0 && (
               <div className="irml">
+                <span className="irml-label">Material:</span>
                 {rm.map((r: any, ri: number) => (
                   <span key={ri} className="irmlb">
-                    <Layers style={{ width: 9, height: 9 }} />
+                    {ri > 0 && <span className="irml-sep">·</span>}
                     {r.rm_name || r.name || "Material"}
-                    <b>{r.brand_name ? ` | ${r.brand_name}` : ""}</b>
-                    {r.required_qty && 1===2 ? ` (${parseFloat(r.required_qty).toFixed(2)} ${r.unit || ""})` : ""}
+                    {r.brand_name && <b>{` (${r.brand_name})`}</b>}
                   </span>
                 ))}
               </div>
@@ -834,7 +1187,13 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
             <span className="qp-bar-sep">·</span>
             <span className="qp-bar-num">{quotation.quotation_number}</span>
           </div>
-          <button className="qp-btn" onClick={() => { setPdfError(""); setPdfChoiceOpen(true); }}>
+          <button
+            className="qp-btn"
+            onClick={() => {
+              setPdfError("");
+              setPdfChoiceOpen(true);
+            }}
+          >
             <Printer style={{ width: 15, height: 15 }} />
             Print / Save PDF
           </button>
@@ -842,242 +1201,356 @@ export default function PublicQuotationView({ documentType = "quotation" }: { do
 
         <div className="qp-wrap">
           <div className="qp-pdf-bundle">
-          <div className="qp-doc">
-            {/* HEADER — logo/company left, Web/Email/Mobile stacked right, like the reference PDF */}
-            <div className="qp-hd">
-              <div
-                className="qp-logo"
-                style={{ background: cLogo ? "transparent" : companyColor }}
-              >
-                {cLogo ? (
-                  <img src={cLogo} alt={cName} onError={(e) => (e.currentTarget.style.display = "none")} />
-                ) : (
-                  cName.charAt(0).toUpperCase()
-                )}
-              </div>
-
-              <div>
-                <div className="qp-co-name">{cName}</div>
-                {cAddress && <div className="qp-co-addr">{cAddress}</div>}
-              </div>
-
-              <div className="qp-hd-right">
-                {cWebsite && (
-                  <div className="qp-hd-row"><GlobeIcon /><b>WEB.</b><span className="val">{cWebsite}</span></div>
-                )}
-                {cEmail && (
-                  <div className="qp-hd-row"><MailIcon /><b>EM.</b><span className="val">{cEmail}</span></div>
-                )}
-                {cPhone && (
-                  <div className="qp-hd-row"><PhoneIcon /><b>MO.</b><span className="val">{cPhone}</span></div>
-                )}
-                {cWA && cWA !== cPhone && (
-                  <div className="qp-hd-row"><WaIcon /><b>WA.</b><span className="val">{cWA}</span></div>
-                )}
-                {cGst && (
-                  <div className="qp-hd-row"><HashIcon /><b>GST.</b><span className="val">{cGst}</span></div>
-                )}
-              </div>
-            </div>
-
-            {/* Document date and number */}
-            <div className="qp-meta">
-              <div className="qp-meta-l">{isInvoice ? "Invoice Date" : "Quotation Date"}: <b>{fmtDate}</b></div>
-              <div className="qp-meta-num">{quotation.quotation_number}</div>
-            </div>
-
-            {/* CLIENT */}
-            <div className="qp-cl">
-              <div className="qp-ey">{isInvoice ? "Bill To" : "Prepared For"}</div>
-              <div className="qp-clg">
-                <div className="qp-clf">
-                  <label>Client Name</label>
-                  <p>{custName}</p>
-                </div>
-                <div className="qp-clf">
-                  <label>Phone</label>
-                  <p className="sm">{custPhone}</p>
-                </div>
-                {custEmail && (
-                  <div className="qp-clf">
-                    <label>Email</label>
-                    <p className="sm">{custEmail}</p>
-                  </div>
-                )}
-                {custAddr && (
-                  <div className="qp-clf full">
-                    <label>Address</label>
-                    <p className="sm">{custAddr}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ITEMS TABLE — column set matches the reference PDF exactly */}
-            <div className="qp-tw">
-              <table className="qp-tbl">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th style={{ minWidth: 170 }}>Description</th>
-                    <th className="r" style={{ width: 80 }}>Width</th>
-                    <th className="r" style={{ width: 80 }}>Height</th>
-                    <th className="c" style={{ width: 46 }}>Qty</th>
-                    <th className="c" style={{ width: 60 }}>Per</th>
-                    <th className="r" style={{ width: 90 }}>Total Measure</th>
-                    <th className="r" style={{ width: 80 }}>Rate</th>
-                    <th className="r" style={{ width: 100 }}>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableRows.length ? (
-                    tableRows
+            <div className="qp-doc">
+              {/* HEADER — logo/company left, Web/Email/Mobile stacked right, like the reference PDF */}
+              <div className="qp-hd">
+                <div
+                  className={cLogo ? "qp-logo has-img" : "qp-logo"}
+                  style={{ background: cLogo ? "transparent" : companyColor }}
+                >
+                  {cLogo ? (
+                    <img
+                      src={cLogo}
+                      alt={cName}
+                      onError={(e) => (e.currentTarget.style.display = "none")}
+                    />
                   ) : (
+                    cName.charAt(0).toUpperCase()
+                  )}
+                </div>
+
+                <div>
+                  <div className="qp-co-name">{cName}</div>
+                  {cAddress && <div className="qp-co-addr">{cAddress}</div>}
+                </div>
+
+                <div className="qp-hd-right">
+                  {cWebsite && (
+                    <div className="qp-hd-row">
+                      <b>WEB.</b>
+                      <span className="val">{cWebsite}</span>
+                    </div>
+                  )}
+                  {cEmail && (
+                    <div className="qp-hd-row">
+                      <b>EM.</b>
+                      <span className="val">{cEmail}</span>
+                    </div>
+                  )}
+                  {cPhone && (
+                    <div className="qp-hd-row">
+                      <b>MO.</b>
+                      <span className="val">{cPhone}</span>
+                    </div>
+                  )}
+                  {cWA && cWA !== cPhone && (
+                    <div className="qp-hd-row">
+                      <b>WA.</b>
+                      <span className="val">{cWA}</span>
+                    </div>
+                  )}
+                  {cGst && (
+                    <div className="qp-hd-row">
+                      <b>GST.</b>
+                      <span className="val">{cGst}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Document date and number */}
+              <div className="qp-meta">
+                <div className="qp-meta-l">
+                  {isInvoice ? "Invoice Date" : "Quotation Date"}:{" "}
+                  <b>{fmtDate}</b>
+                </div>
+                <div className="qp-meta-num">{quotation.quotation_number}</div>
+              </div>
+
+              {/* CLIENT */}
+              <div className="qp-cl">
+                <div className="qp-ey">
+                  {isInvoice ? "Bill To" : "Prepared For"}
+                </div>
+                <div className="qp-clg">
+                  <div className="qp-clf">
+                    <label>Client Name</label>
+                    <p>{custName}</p>
+                  </div>
+                  <div className="qp-clf">
+                    <label>Phone</label>
+                    <p className="sm">{custPhone}</p>
+                  </div>
+                  {custEmail && (
+                    <div className="qp-clf">
+                      <label>Email</label>
+                      <p className="sm">{custEmail}</p>
+                    </div>
+                  )}
+                  {custAddr && (
+                    <div className="qp-clf full">
+                      <label>Address</label>
+                      <p className="sm">{custAddr}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ITEMS TABLE — column set matches the reference PDF exactly */}
+              <div className="qp-tw">
+                <table className="qp-tbl">
+                  <thead>
                     <tr>
-                      <td colSpan={9} style={{ textAlign: "center", padding: "40px", color: "#94a3b8", fontSize: 13 }}>
-                        No items found
-                      </td>
+                      <th>#</th>
+                      <th style={{ minWidth: 170 }}>Description</th>
+                      <th className="r" style={{ width: 80 }}>
+                        Width
+                      </th>
+                      <th className="r" style={{ width: 80 }}>
+                        Height
+                      </th>
+                      <th className="c" style={{ width: 46 }}>
+                        Qty
+                      </th>
+                      <th className="c" style={{ width: 60 }}>
+                        Per
+                      </th>
+                      <th className="r" style={{ width: 90 }}>
+                        Total Measure
+                      </th>
+                      <th className="r" style={{ width: 80 }}>
+                        Rate
+                      </th>
+                      <th className="r" style={{ width: 100 }}>
+                        Amount
+                      </th>
                     </tr>
-                  )}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={8}>TOTAL</td>
-                    <td className="amt">{fc(finalAmt)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {tableRows.length ? (
+                      tableRows
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={9}
+                          style={{
+                            textAlign: "center",
+                            padding: "40px",
+                            color: "#94a3b8",
+                            fontSize: 13,
+                          }}
+                        >
+                          No items found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={8}>TOTAL</td>
+                      <td className="amt">{fc(finalAmt)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
 
-            {/* TOTALS BREAKDOWN */}
-            <div className="qp-tot">
-              <div className="qp-toti">
-                {finalAmt > 0 && (
-                  <div className="qp-wb">
-                    <div className="qp-wl">Amount in Words</div>
-                    <div className="qp-wt">{numberToWords(finalAmt)}</div>
-                  </div>
-                )}
-                <div className="qp-tt">
-                  <div className="qp-tr2">
-                    <span className="l">Subtotal</span>
-                    <span className="v">{fc(subtotal)}</span>
-                  </div>
-                  {discAmt > 0 && (
-                    <>
-                      <div className="qp-tr2">
-                        <span className="l">Discount{discType === "PCT" ? ` (${discVal}%)` : ""}</span>
-                        <span className="v rd">− {fc(discAmt)}</span>
-                      </div>
-                      <div className="qp-tr2">
-                        <span className="l">After Discount</span>
-                        <span className="v">{fc(afterDisc)}</span>
-                      </div>
-                    </>
+              {/* TOTALS BREAKDOWN */}
+              <div className="qp-tot">
+                <div className="qp-toti">
+                  {finalAmt > 0 && (
+                    <div className="qp-wb">
+                      <div className="qp-wl">Amount in Words</div>
+                      <div className="qp-wt">{numberToWords(finalAmt)}</div>
+                    </div>
                   )}
-                  {gstPct > 0 && (
+                  <div className="qp-tt">
                     <div className="qp-tr2">
-                      <span className="l">GST ({gstPct}%)</span>
-                      <span className="v gn">+ {fc(gstAmt)}</span>
+                      <span className="l">Subtotal</span>
+                      <span className="v">{fc(subtotal)}</span>
                     </div>
-                  )}
-                  <div className="qp-td" />
-                  <div className="qp-gr">
-                    <span className="qp-gl">Grand Total</span>
-                    <span className="qp-gv">{fc(finalAmt)}</span>
+                    {discAmt > 0 && (
+                      <>
+                        <div className="qp-tr2">
+                          <span className="l">
+                            Discount{discType === "PCT" ? ` (${discVal}%)` : ""}
+                          </span>
+                          <span className="v rd">− {fc(discAmt)}</span>
+                        </div>
+                        <div className="qp-tr2">
+                          <span className="l">After Discount</span>
+                          <span className="v">{fc(afterDisc)}</span>
+                        </div>
+                      </>
+                    )}
+                    {gstPct > 0 && (
+                      <div className="qp-tr2">
+                        <span className="l">GST ({gstPct}%)</span>
+                        <span className="v gn">+ {fc(gstAmt)}</span>
+                      </div>
+                    )}
+                    <div className="qp-td" />
+                    <div className="qp-gr">
+                      <span className="qp-gl">Grand Total</span>
+                      <span className="qp-gv">{fc(finalAmt)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* TERMS */}
-            {terms.length > 0 && (
-              <div className="qp-tm">
-                <div className="qp-ey">Terms &amp; Conditions</div>
-                <div className="qp-tml">
-                  {terms.map((t, i) => (
-                    <div key={t.terms_id || i} className="qp-tmi">
-                      <div className="qp-tmd" />
-                      <span>{t.content || t.title}</span>
-                    </div>
-                  ))}
+              {/* TERMS */}
+              {terms.length > 0 && (
+                <div className="qp-tm">
+                  <div className="qp-ey">Terms &amp; Conditions</div>
+                  <div className="qp-tml">
+                    {terms.map((t, i) => (
+                      <div key={t.terms_id || i} className="qp-tmi">
+                        <div className="qp-tmd" />
+                        <span>{t.content || t.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SIGNATURE */}
+              <div className="qp-sg">
+                <div className="qp-sgb">
+                  <div className="qp-sgl" />
+                  <div className="qp-sgn">{custName}</div>
+                  <div className="qp-sgr">Client Signature</div>
+                </div>
+                <div className="qp-sgb">
+                  <div className="qp-sgl" />
+                  <div className="qp-sgn">{cName}</div>
+                  <div className="qp-sgr">Authorised Signatory</div>
                 </div>
               </div>
-            )}
-
-            {/* SIGNATURE */}
-            <div className="qp-sg">
-              <div className="qp-sgb">
-                <div className="qp-sgl" />
-                <div className="qp-sgn">{custName}</div>
-                <div className="qp-sgr">Client Signature</div>
-              </div>
-              <div className="qp-sgb">
-                <div className="qp-sgl" />
-                <div className="qp-sgn">{cName}</div>
-                <div className="qp-sgr">Authorised Signatory</div>
-              </div>
             </div>
-          </div>
 
-          {/* Product-wise work order details: screen only, excluded from quotation PDF */}
-          <section className="qp-work-order-page" aria-label="Product-wise work order status">
-            <h2 className="qp-wo-title">Product-wise Work Order Status</h2>
-            {roomGroups.map((room, roomIndex) => (
-              <div key={`${room.name}-${roomIndex}`}>
-                <h3 className="qp-wo-room">{room.name || `Room ${roomIndex + 1}`}</h3>
-                <div className="qp-wo-grid">
-                  {room.items.map((item: any, productIndex: number) => {
-                    const statusValue = Number(item.production_status || 1);
-                    const history = item.latest_work_status || item.latest_history || item.work_status_history?.[0] || null;
-                    const imageUrl = getWorkOrderImageUrl(history?.image);
-                    const statusTitle = item.production_status_title || PRODUCTION_STATUSES.find((status) => status.value === statusValue)?.label || "Pending";
+            {/* Product-wise work order details: screen only, excluded from quotation PDF */}
+            <section
+              className="qp-work-order-page"
+              aria-label="Product-wise work order status"
+            >
+              <h2 className="qp-wo-title">Product-wise Work Order Status</h2>
+              {roomGroups.map((room, roomIndex) => (
+                <div key={`${room.name}-${roomIndex}`}>
+                  <h3 className="qp-wo-room">
+                    {room.name || `Room ${roomIndex + 1}`}
+                  </h3>
+                  <div className="qp-wo-grid">
+                    {room.items.map((item: any, productIndex: number) => {
+                      const statusValue = Number(item.production_status || 1);
+                      const history =
+                        item.latest_work_status ||
+                        item.latest_history ||
+                        item.work_status_history?.[0] ||
+                        null;
+                      const imageUrl = getWorkOrderImageUrl(history?.image);
+                      const statusTitle =
+                        item.production_status_title ||
+                        PRODUCTION_STATUSES.find(
+                          (status) => status.value === statusValue,
+                        )?.label ||
+                        "Pending";
 
-                    return (
-                      <article className="qp-wo-card" key={item.qp_id || `${roomIndex}-${productIndex}`}>
-                        <h4 className="qp-wo-product">{item.product_name || `Product ${productIndex + 1}`}</h4>
-                        <span className="qp-wo-status">{statusTitle}</span>
-                        <p className="qp-wo-remark">{history?.remark?.trim() || "No work remark added."}</p>
-                        {imageUrl && (
-                          <a href={imageUrl} target="_blank" rel="noopener noreferrer">
-                            <img className="qp-wo-image" src={imageUrl} alt={`Work update for ${item.product_name || "product"}`} />
-                          </a>
-                        )}
-                      </article>
-                    );
-                  })}
+                      return (
+                        <article
+                          className="qp-wo-card"
+                          key={item.qp_id || `${roomIndex}-${productIndex}`}
+                        >
+                          <h4 className="qp-wo-product">
+                            {item.product_name || `Product ${productIndex + 1}`}
+                          </h4>
+                          <span className="qp-wo-status">{statusTitle}</span>
+                          <p className="qp-wo-remark">
+                            {history?.remark?.trim() || "No work remark added."}
+                          </p>
+                          {imageUrl && (
+                            <a
+                              href={imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <img
+                                className="qp-wo-image"
+                                src={imageUrl}
+                                alt={`Work update for ${item.product_name || "product"}`}
+                              />
+                            </a>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </section>
+              ))}
+            </section>
           </div>
 
           {pdfChoiceOpen && (
-            <div className="qp-pdf-overlay" role="presentation" onMouseDown={(event) => {
-              if (event.target === event.currentTarget && !generatingPdf) setPdfChoiceOpen(false);
-            }}>
-              <div className="qp-pdf-dialog" role="dialog" aria-modal="true" aria-labelledby="qp-pdf-title">
+            <div
+              className="qp-pdf-overlay"
+              role="presentation"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget && !generatingPdf)
+                  setPdfChoiceOpen(false);
+              }}
+            >
+              <div
+                className="qp-pdf-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="qp-pdf-title"
+              >
                 <h2 id="qp-pdf-title">Choose what to download</h2>
-                <p>Select one document. The PDF will download directly to your device.</p>
+                <p>
+                  Select one document. The PDF will download directly to your
+                  device.
+                </p>
                 {pdfError && <p className="qp-pdf-error">{pdfError}</p>}
-                <button disabled={generatingPdf} onClick={() => void downloadPdf("quotation")}>
-                  {generatingPdf ? "Preparing PDF…" : `${isInvoice ? "Invoice" : "Quotation"} only`}
+                <button
+                  disabled={generatingPdf}
+                  onClick={() => void downloadPdf("quotation")}
+                >
+                  {generatingPdf
+                    ? "Preparing PDF…"
+                    : `${isInvoice ? "Invoice" : "Quotation"} only`}
                 </button>
-                <button disabled={generatingPdf} onClick={() => void downloadPdf("work-order")}>
+                <button
+                  disabled={generatingPdf}
+                  onClick={() => void downloadPdf("work-order")}
+                >
                   {generatingPdf ? "Preparing PDF…" : "Work Order"}
                 </button>
-                <button disabled={generatingPdf} onClick={() => void downloadPdf("both")}>
-                  {generatingPdf ? "Preparing PDF…" : `${isInvoice ? "Invoice" : "Quotation"} + Work Order`}
+                <button
+                  disabled={generatingPdf}
+                  onClick={() => void downloadPdf("both")}
+                >
+                  {generatingPdf
+                    ? "Preparing PDF…"
+                    : `${isInvoice ? "Invoice" : "Quotation"} + Work Order`}
                 </button>
-                <button className="qp-pdf-cancel" disabled={generatingPdf} onClick={() => setPdfChoiceOpen(false)}>Cancel</button>
+                <button
+                  className="qp-pdf-cancel"
+                  disabled={generatingPdf}
+                  onClick={() => setPdfChoiceOpen(false)}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
 
           {/* Screen footer */}
           <div className="qp-ft">
-            Generated by <strong style={{ color: "#475569" }}>{cName}</strong> · Powered by{" "}
-            <a href="https://www.sunshineinfotech.in/" target="_blank" rel="noopener noreferrer">
+            Generated by <strong style={{ color: "#475569" }}>{cName}</strong> ·
+            Powered by{" "}
+            <a
+              href="https://www.sunshineinfotech.in/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Sunshine Infotech
             </a>
           </div>

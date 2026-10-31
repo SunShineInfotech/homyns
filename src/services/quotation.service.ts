@@ -33,6 +33,11 @@ export interface Quotation {
   invoice_generated_at?: string;
   is_deleted?: string;
   c_date?: string;
+  /** Quotation date (YYYY-MM-DD) — exists only in tbl_quotation */
+  quotation_date?: string;
+  /** Client's own created date / status (returned separately by the API) */
+  client_c_date?: string;
+  client_status?: string;
   rooms?: any[];
   // Client fields
   phone?: string;
@@ -336,6 +341,39 @@ export class QuotationService extends BaseService {
       return {
         status: 'error',
         message: error.response?.data?.message || 'Failed to update remark'
+      };
+    }
+  }
+
+  /**
+   * Replace the raw materials of one quotation product (Edit Item).
+   * The list sent is the final list: missing rows are removed, existing ones
+   * updated and new ones added. The product master is not changed.
+   */
+  async updateQuotationProductRawMaterials(data: {
+    quotation_id: string;
+    qp_id: string;
+    company_id: string;
+    raw_materials: { rm_id: string; required_qty: number; unit?: string }[];
+  }): Promise<ApiResponse> {
+    try {
+      const payload = {
+        type: 17,
+        quotation_id: data.quotation_id,
+        qp_id: data.qp_id,
+        company_id: data.company_id,
+        raw_materials: data.raw_materials,
+      };
+
+      console.log('Update quotation product raw materials payload:', payload);
+
+      const response = await this.post<ApiResponse>(payload);
+      return response;
+    } catch (error: any) {
+      console.error('Update quotation product raw materials error:', error);
+      return {
+        status: 'error',
+        message: error.response?.data?.message || 'Failed to update raw materials'
       };
     }
   }

@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { quotationService, Quotation } from "@/services/quotation.service";
-import { quotationStatusService, QUOTATION_STATUSES } from "@/services/quotation-status.service";
+import {
+  quotationStatusService,
+  QUOTATION_STATUSES,
+} from "@/services/quotation-status.service";
 import { customerService, Customer } from "@/services/customer.service";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -87,16 +90,17 @@ const getIndiaToday = () => {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const values = Object.fromEntries(
+    parts.map(({ type, value }) => [type, value]),
+  );
   return `${values.year}-${values.month}-${values.day}`;
 };
 
+// Default filter = the current month (India time): 1st → last day of the month.
 const getDefaultDateRange = () => {
-  const [year, month, day] = getIndiaToday().split("-").map(Number);
-  const today = new Date(Date.UTC(year, month - 1, day));
-  const startDate = new Date(today);
-  startDate.setUTCDate(startDate.getUTCDate() - 30);
-  const endDate = new Date(Date.UTC(year, month, 0));
+  const [year, month] = getIndiaToday().split("-").map(Number);
+  const startDate = new Date(Date.UTC(year, month - 1, 1));
+  const endDate = new Date(Date.UTC(year, month, 0)); // day 0 of next month = last day of this month
 
   const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
   return {
@@ -117,11 +121,26 @@ const getIndiaDatePart = (dateTime?: string) => {
       month: "2-digit",
       day: "2-digit",
     }).formatToParts(new Date(dateTime));
-    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    const values = Object.fromEntries(
+      parts.map(({ type, value }) => [type, value]),
+    );
     return `${values.year}-${values.month}-${values.day}`;
   }
 
   return dateTime.slice(0, 10);
+};
+
+/**
+ * The quotation's own date (YYYY-MM-DD).
+ * `quotation_date` exists only in tbl_quotation, so it can never be
+ * overwritten by the joined client row (the old API returned the CLIENT's
+ * c_date as the quotation's c_date). Falls back to c_date for old rows.
+ */
+const getQuotationDate = (quotation: Quotation): string => {
+  const quotationDate = String(quotation.quotation_date || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(quotationDate))
+    return quotationDate.slice(0, 10);
+  return getIndiaDatePart(quotation.c_date);
 };
 
 export default function QuotationHistory() {
@@ -136,7 +155,9 @@ export default function QuotationHistory() {
   const [start, setStart] = useState(() => getDefaultDateRange().start);
   const [end, setEnd] = useState(() => getDefaultDateRange().end);
   const [customerId, setCustomerId] = useState("");
-  const [statusFilter, setStatusFilter] = useState(() => searchParams.get("status") || "");
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get("status") || "",
+  );
   const [search, setSearch] = useState("");
 
   // Sort - Default: sort by quotation_id DESC (newest first)
@@ -155,8 +176,13 @@ export default function QuotationHistory() {
   const updateStatusFilter = (status: string) => {
     setStatusFilter(status);
     const nextParams = new URLSearchParams(searchParams);
-    if (status) { nextParams.set("status", status); nextParams.delete("view"); }
-    else { nextParams.delete("status"); nextParams.set("view", "all"); }
+    if (status) {
+      nextParams.set("status", status);
+      nextParams.delete("view");
+    } else {
+      nextParams.delete("status");
+      nextParams.set("view", "all");
+    }
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -196,10 +222,14 @@ export default function QuotationHistory() {
           quotationsRes.data.map(async (quotation) => {
             if (!quotation.quotation_id) return quotation;
             try {
-              const historyRes = await quotationStatusService.getStatusHistory(quotation.quotation_id);
-              const history = historyRes.status === "success" && Array.isArray(historyRes.data)
-                ? historyRes.data
-                : [];
+              const historyRes = await quotationStatusService.getStatusHistory(
+                quotation.quotation_id,
+              );
+              const history =
+                historyRes.status === "success" &&
+                Array.isArray(historyRes.data)
+                  ? historyRes.data
+                  : [];
               const currentStatus = history.length
                 ? String(history[history.length - 1].status || "").trim()
                 : quotation.status;
@@ -258,16 +288,12 @@ export default function QuotationHistory() {
       );
     }
 
-    // Apply date filters
+    // Apply date filters (on the quotation's own date)
     if (start) {
-      list = list.filter(
-        (item) => getIndiaDatePart(item.c_date) >= start,
-      );
+      list = list.filter((item) => getQuotationDate(item) >= start);
     }
     if (end) {
-      list = list.filter(
-        (item) => getIndiaDatePart(item.c_date) <= end,
-      );
+      list = list.filter((item) => getQuotationDate(item) <= end);
     }
 
     // Apply customer filter
@@ -276,14 +302,16 @@ export default function QuotationHistory() {
     }
 
     if (statusFilter) {
-      list = list.filter((item) => (item.status || "Pending").trim() === statusFilter);
+      list = list.filter(
+        (item) => (item.status || "Pending").trim() === statusFilter,
+      );
     }
 
     // Apply sorting
     list.sort((a, b) => {
       let va: any = "";
       let vb: any = "";
-      
+
       if (sortKey === "quotation_id") {
         va = Number(a.quotation_id) || 0;
         vb = Number(b.quotation_id) || 0;
@@ -302,16 +330,26 @@ export default function QuotationHistory() {
         va = (a.status || "").toLowerCase();
         vb = (b.status || "").toLowerCase();
       } else {
-        va = a.c_date || "";
-        vb = b.c_date || "";
+        // Date sort; same day → newer quotation id first/last with the date
+        va = `${getQuotationDate(a)}#${String(Number(a.quotation_id) || 0).padStart(10, "0")}`;
+        vb = `${getQuotationDate(b)}#${String(Number(b.quotation_id) || 0).padStart(10, "0")}`;
       }
-      
+
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
     console.log("Filtered result:", list.length);
     setFiltered(list);
-  }, [quotations, search, start, end, customerId, statusFilter, sortKey, sortDir]);
+  }, [
+    quotations,
+    search,
+    start,
+    end,
+    customerId,
+    statusFilter,
+    sortKey,
+    sortDir,
+  ]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -478,7 +516,10 @@ export default function QuotationHistory() {
               <SearchableSelect
                 options={[
                   { value: "", label: "All statuses" },
-                  ...QUOTATION_STATUSES.map((status) => ({ value: status, label: status })),
+                  ...QUOTATION_STATUSES.map((status) => ({
+                    value: status,
+                    label: status,
+                  })),
                 ]}
                 value={statusFilter}
                 onChange={updateStatusFilter}
@@ -592,7 +633,7 @@ export default function QuotationHistory() {
                       {item.generated_by_name || "—"}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {formatDate(item.c_date)}
+                      {formatDate(getQuotationDate(item))}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
@@ -680,7 +721,7 @@ export default function QuotationHistory() {
                       {item.client_name}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Created: {formatDate(item.c_date)}
+                      Created: {formatDate(getQuotationDate(item))}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       By: {item.generated_by_name || "—"}
