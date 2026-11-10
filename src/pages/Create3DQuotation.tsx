@@ -375,7 +375,7 @@ export default function Create3DQuotationPage() {
   </MainLayout>; return <MainLayout bare title={plan.project_title || "3D House Plan"} subtitle={`${plan.client_name || "No customer"} · ${data.referencePlanImageData ? "Uploaded floor plan" : `${plan.bhk} · ${plan.site_type}`}`}>
     <div className="flex h-full min-h-0 flex-col gap-2 p-2">
       <div className="z-20 flex min-h-10 items-center gap-1 overflow-x-auto rounded-lg border bg-background/95 px-1.5 py-1 shadow-sm backdrop-blur">
-        <Button size="icon" className="h-8 w-8 shrink-0" variant="ghost" title="Back to summary" aria-label="Back to summary" onClick={() => { setScreen("summary"); commitData({ ...data, phase: "summary" }, false); }}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button size="icon" className="h-8 w-8 shrink-0" variant="ghost" title="Back to 3D quotations" aria-label="Back to 3D quotations" onClick={() => { void saveRecord(planRef.current, dataRef.current, false, false).finally(() => { setScreen("list"); navigate("/create-3d-quotation"); }); }}><ArrowLeft className="h-4 w-4" /></Button>
         <span className="hidden max-w-48 shrink-0 truncate text-xs font-semibold sm:inline" title={plan.project_title}>{plan.project_title || "House plan"}</span>
         <div className="inline-flex shrink-0 rounded-md border bg-card p-0.5">
           <Button size="icon" className="h-7 w-8" title="2D map" aria-label="2D map" variant={!view3D ? "default" : "ghost"} onClick={() => { setView3D(false); setView360(false); setClientPresentation(false); }}><Map className="h-4 w-4" /></Button>
