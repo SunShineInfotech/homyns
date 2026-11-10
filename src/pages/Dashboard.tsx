@@ -22,6 +22,7 @@ import { leadService } from "@/services/lead.service";
 import { leadSourceService, LeadSource } from "@/services/lead-source.service";
 import { leadStatusService, LeadStatus } from "@/services/lead-status.service";
 import { customerService } from "@/services/customer.service";
+import { QUOTATION_STATUSES } from "@/services/quotation-status.service";
 import { followupService, Followup } from "@/services/followup.service";
 import { getDateInIndia, getIndiaDate } from "@/lib/india-date";
 
@@ -311,8 +312,8 @@ export default function Dashboard() {
   } as Record<string, string>)[c];
 
   // Prepare chart data
-  const quotationPieData = Object.entries(quotationStatusCounts).map(([name, value]) => ({ name, value }));
-  
+  const quotationPieData = QUOTATION_STATUSES.map((name) => ({ name, value: quotationStatusCounts[name] || 0 }));
+
   // Lead status pie data with colors from database
   const leadStatusPieData = Object.entries(leadStatusCounts).map(([name, data]) => ({ 
     name, 
@@ -349,37 +350,6 @@ export default function Dashboard() {
   return (
     <MainLayout title="Dashboard" subtitle="Overview of your business">
       <div className="space-y-6 animate-fade-in pb-20">
-        {/* Hero CTAs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="border-0 p-5 md:p-7 shadow-elevated overflow-hidden relative bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground rounded-2xl">
-            <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
-            <div className="absolute -left-10 -bottom-10 w-32 h-32 rounded-full bg-white/5 blur-xl" />
-            <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl md:text-2xl font-display font-semibold mb-1">How To Use</h2>
-                <p className="text-primary-foreground/85 text-sm md:text-base">Learn how to create, customize, and share professional quotations in just a few simple steps.</p>
-              </div>
-              <Button onClick={() => navigate("/HowToUse")} size="lg" className="bg-white text-primary hover:bg-white/90 rounded-xl gap-2 shadow-lg shrink-0">
-                <Plus className="w-5 h-5" /> View Guide
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="border-0 p-5 md:p-7 shadow-elevated overflow-hidden relative bg-gradient-to-r from-blue-600 via-blue-500 to-blue-400 text-white rounded-2xl">
-            <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-2xl" />
-            <div className="absolute -left-10 -bottom-10 w-32 h-32 rounded-full bg-white/5 blur-xl" />
-            <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl md:text-2xl font-display font-semibold mb-1">Create New Quotation</h2>
-                <p className="text-white/85 text-sm md:text-base">Start crafting a professional quotation in minutes</p>
-              </div>
-              <Button onClick={() => navigate("/create-quotation/client")} size="lg" className="bg-white text-blue-600 hover:bg-white/90 rounded-xl gap-2 shadow-lg shrink-0">
-                <Plus className="w-5 h-5" /> New Quotation
-              </Button>
-            </div>
-          </Card>
-        </div>
-
         {/* Date Filter */}
         <Card className="p-4 md:p-5 rounded-2xl border-border">
           <div className="flex flex-col md:flex-row gap-3 md:items-end">
@@ -447,6 +417,22 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Complete quotation status counts */}
+        <Card className="animate-fade-in rounded-2xl border-border p-5 shadow-sm transition-all duration-300 hover:shadow-md">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div><h3 className="font-display font-semibold">Quotations by Status</h3><p className="text-xs text-muted-foreground">Counts for the selected date range</p></div>
+            <FileText className="h-5 w-5 text-primary" />
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            {QUOTATION_STATUSES.map((status, index) => (
+              <div key={status} className="animate-fade-in rounded-xl border border-border/80 bg-card p-3 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm" style={{ animationDelay: `${index * 35}ms` }}>
+                <div className="mb-2 flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: STATUS_COLORS[status] || "#6b7280" }} /><span className="truncate text-xs text-muted-foreground" title={status}>{status}</span></div>
+                <p className="text-2xl font-semibold tabular-nums">{quotationStatusCounts[status] || 0}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
 
         {/* Best Source Highlight */}
         {bestSource.name && bestSource.count > 0 && (

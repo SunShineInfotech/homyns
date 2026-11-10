@@ -37,6 +37,7 @@ import {
   ShoppingCart,
   Cuboid,
   Truck,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -53,6 +54,12 @@ const ALL_NAV_ITEMS = [
     permission: "dashboard",
   },
   {
+    icon: BarChart3,
+    label: "Finance Dashboard",
+    path: "/finance/dashboard",
+    permission: "dashboard",
+  },
+  {
     icon: FileText,
     label: "Quotation",
     path: "#",
@@ -66,20 +73,47 @@ const ALL_NAV_ITEMS = [
   },
   {
     icon: FileText,
+    label: "All Quotations",
+    path: "/quotations?view=all",
+    permission: "quotations",
+  },
+  {
+    icon: FileText,
     label: "Quotation History",
     path: "#",
     permission: "quotations",
     isParent: true,
     children: [
-      { icon: FileText, label: "All Quotations", path: "/quotations?view=all", permission: "quotations" },
-
-      ...QUOTATION_STATUSES.map((status) => ({
+      ...QUOTATION_STATUSES.filter((status) => ![
+        "Work In Progress",
+        "Work Completed",
+        "Work Stop Due To Payment",
+        "Closed",
+      ].includes(status)).map((status) => ({
         icon: FileText,
         label: status,
         path: `/quotations?status=${encodeURIComponent(status)}`,
         permission: "quotations",
       })),
     ],
+  },
+  {
+    icon: Wrench,
+    label: "Work Orders",
+    path: "#",
+    permission: "quotations",
+    isParent: true,
+    children: QUOTATION_STATUSES.filter((status) => [
+      "Work In Progress",
+      "Work Completed",
+      "Work Stop Due To Payment",
+      "Closed",
+    ].includes(status)).map((status) => ({
+      icon: ClipboardList,
+      label: status,
+      path: `/quotations?status=${encodeURIComponent(status)}`,
+      permission: "quotations",
+    })),
   },
   {
     icon: Users,
@@ -91,6 +125,7 @@ const ALL_NAV_ITEMS = [
       { icon: Users, label: "Employees", path: "/employees", permission: "employees" },
       { icon: Users, label: "Clients", path: "/clients", permission: "clients" },
       { icon: Truck, label: "Vendors", path: "/vendors", permission: "vendors" },
+      { icon: Building2, label: "Agencies", path: "/agencies", permission: "agencies" },
     ],
   },
   {
@@ -180,6 +215,12 @@ const ALL_NAV_ITEMS = [
         permission: "lead-statuses",
       },
       {
+        icon: Wrench,
+        label: "Agency Work Types",
+        path: "/work-types",
+        permission: "work-types",
+      },
+      {
         icon: Ruler,
         label: "Units",
         path: "/units",
@@ -248,8 +289,8 @@ const ALL_NAV_ITEMS = [
       { icon: FileText, label: "Purchase", path: "/purchase", permission: "purchases" },
       { icon: FileText, label: "Purchase Payments", path: "/purchase-payments", permission: "purchase-payments" },
       { icon: Building2, label: "Warehouses & Decks", path: "/stock/warehouses", permission: "stock-warehouses" },
-      { icon: Package, label: "Stock IN", path: "/stock/in", permission: "stock-in" },
       { icon: Package, label: "Stock OUT", path: "/stock/out", permission: "stock-out" },
+      { icon: Package, label: "Dead Stock", path: "/stock/dead", permission: "stock-dead" },
       { icon: ArrowRightLeft, label: "Stock Transfer", path: "/stock/transfer", permission: "stock-transfer" },
       { icon: ClipboardList, label: "Stock Ledger", path: "/stock/ledger", permission: "stock-ledger" },
       { icon: Layers, label: "All Stock", path: "/stock/all", permission: "stock-all" },
@@ -841,9 +882,10 @@ export function Sidebar() {
             );
           }
 
-          const isActive =
-            location.pathname === item.path ||
-            (item.path !== "/" && location.pathname.startsWith(item.path));
+          const isActive = item.path.includes("?")
+            ? isNavTargetActive(item.path)
+            : location.pathname === item.path ||
+              (item.path !== "/" && location.pathname.startsWith(item.path));
 
           return (
             <NavLink

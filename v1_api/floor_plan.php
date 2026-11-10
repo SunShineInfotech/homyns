@@ -20,11 +20,14 @@ function fpImage($data, $company_id) {
         || ($ext === 'jpg' && substr($bytes, 0, 3) === "\xff\xd8\xff")
         || ($ext === 'webp' && substr($bytes, 0, 4) === 'RIFF' && substr($bytes, 8, 4) === 'WEBP');
     if (!$valid) return ['path' => '', 'error' => 'The uploaded image content does not match its file type'];
-    $dir = __DIR__ . '/uploads/3d_floor_plans/';
+    // Keep plan images alongside the other application uploads, outside v1_api.
+    $dir = __DIR__ . '/../uploadfiles/3d_floor_plans/';
     if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) return ['path' => '', 'error' => 'Could not create the plan image folder'];
     $name = 'plan_' . preg_replace('/[^A-Za-z0-9]/', '', $company_id) . '_' . bin2hex(random_bytes(16)) . '.' . $ext;
     if (file_put_contents($dir . $name, $bytes, LOCK_EX) === false) return ['path' => '', 'error' => 'Could not save the plan image'];
-    return ['path' => 'uploads/3d_floor_plans/' . $name, 'error' => ''];
+    // Stored relative to the API URL so the frontend resolves it as
+    // /v1_api/../uploadfiles/3d_floor_plans/<file>.
+    return ['path' => '../uploadfiles/3d_floor_plans/' . $name, 'error' => ''];
 }
 
 if ($company_id === '') {

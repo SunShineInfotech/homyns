@@ -12,9 +12,11 @@ interface MainLayoutProps {
   subtitle?: string;
   /** If provided, shows back-button header (sub page). Use "" to navigate(-1). */
   backTo?: string;
+  /** Render a focused full-window workspace without the app navigation chrome. */
+  bare?: boolean;
 }
 
-export function MainLayout({ children, title, subtitle, backTo }: MainLayoutProps) {
+export function MainLayout({ children, title, subtitle, backTo, bare = false }: MainLayoutProps) {
   const [expiryNoticeOpen, setExpiryNoticeOpen] = useState(false);
   const expiryDate = useMemo(() => {
     try {
@@ -36,13 +38,13 @@ export function MainLayout({ children, title, subtitle, backTo }: MainLayoutProp
   }, [expiryDate]);
 
   return (
-    <div className="min-h-screen flex w-full bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-        <Header title={title} subtitle={subtitle} backTo={backTo} />
-        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6">{children}</main>
+    <div className={bare ? "flex h-[100dvh] w-full flex-col overflow-hidden bg-background" : "min-h-screen flex w-full bg-background"}>
+      {!bare && <Sidebar />}
+      <div className={bare ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "flex min-h-screen flex-1 flex-col overflow-x-hidden"}>
+        {!bare && <Header title={title} subtitle={subtitle} backTo={backTo} />}
+        <main className={bare ? "min-h-0 flex-1 overflow-hidden p-0" : "flex-1 p-4 pb-24 md:p-6 md:pb-6"}>{children}</main>
       </div>
-      <MobileBottomNav />
+      {!bare && <MobileBottomNav />}
       <Dialog open={expiryNoticeOpen} onOpenChange={setExpiryNoticeOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

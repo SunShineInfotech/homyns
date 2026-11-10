@@ -1202,6 +1202,12 @@ export default function StepItems() {
   const quickAddShowDimensions = quickAddData.qty_type !== "Fixed";
   const quickAddShowDepth = quickAddData.qty_type === "ByHWD";
   const quickAddShowLength = quickAddData.qty_type === "ByHWL";
+  const duplicateQuickAddProduct = products.find(
+    (product) =>
+      product.product_name.trim().toLocaleLowerCase() ===
+      String(quickAddData.product_name || "").trim().toLocaleLowerCase() &&
+      Boolean(String(quickAddData.product_name || "").trim()),
+  );
 
   const handleQuickAddProduct = async () => {
     if (!quickAddData.product_name?.trim()) {
@@ -1620,6 +1626,12 @@ export default function StepItems() {
                 placeholder="e.g. Premium Wood Table"
                 autoFocus
               />
+              {duplicateQuickAddProduct && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  “{duplicateQuickAddProduct.product_name}” is already in your product list. You can still add it.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">

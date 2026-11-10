@@ -9,6 +9,12 @@ $company_id = mysqli_real_escape_string($sql, trim((string)($data['company_id'] 
 $response = ['status' => 'error', 'message' => 'Invalid request'];
 
 function pstr($value) { global $sql; return mysqli_real_escape_string($sql, trim((string)$value)); }
+function pdeck($company_id, $warehouse_id, $deck_id) {
+    global $sql;
+    $warehouse_id = intval($warehouse_id); $deck_id = intval($deck_id);
+    $q = mysqli_query($sql, "SELECT d.deck_id FROM tbl_warehouse_deck d JOIN tbl_warehouse w ON w.company_id=d.company_id AND w.warehouse_id=d.warehouse_id WHERE d.company_id='$company_id' AND d.warehouse_id='$warehouse_id' AND d.deck_id='$deck_id' AND d.is_deleted='1' AND d.status='Active' AND w.is_deleted='1' AND w.status='Active' LIMIT 1");
+    return $q && mysqli_num_rows($q) > 0;
+}
 function pstock($company_id, $item_type, $item_id, $delta, $history = null) {
     global $sql, $c_date;
     $item_id = pstr($item_id);
@@ -41,6 +47,26 @@ function pstock($company_id, $item_type, $item_id, $delta, $history = null) {
                             VALUES ('$company_id','$item_id','$history_date','$history_remark','$old_stock','$delta','$new_stock'," . ($added_by === '' ? 'NULL' : "'$added_by'") . "," . ($purchase_id > 0 ? "'$purchase_id'" : 'NULL') . ",'1','$c_date')";
         }
         if (!mysqli_query($sql, $history_sql)) return false;
+        $warehouse_id = intval($history['warehouse_id'] ?? 0);
+        $deck_id = intval($history['deck_id'] ?? 0);
+        if ($warehouse_id > 0 && $deck_id > 0) {
+            $location = mysqli_query($sql, "SELECT b.quantity FROM tbl_stock_balance b WHERE b.company_id='$company_id' AND b.item_type='$kind' AND b.item_id='$item_id' AND b.warehouse_id='$warehouse_id' AND b.deck_id='$deck_id' LIMIT 1 FOR UPDATE");
+            $location_row = $location ? mysqli_fetch_assoc($location) : null;
+            $before_location = $location_row ? floatval($location_row['quantity']) : 0;
+            $after_location = round($before_location + floatval($delta), 3);
+            if ($after_location < -0.0001) return false;
+            $ok = mysqli_query($sql, "INSERT INTO tbl_stock_balance (company_id,item_type,item_id,warehouse_id,deck_id,quantity) VALUES ('$company_id','$kind','$item_id','$warehouse_id','$deck_id','$after_location') ON DUPLICATE KEY UPDATE quantity='$after_location',updated_at='$c_date'");
+            if (!$ok) return false;
+            $movement_type = pstr($history['movement_type'] ?? ($delta < 0 ? 'Purchase Return' : 'Purchase'));
+            $movement_ref = pstr($history['purchase_id'] ?? '');
+            $transfer_group = pstr($history['transfer_group'] ?? '');
+            $item_name = pstr($history['item_name'] ?? '');
+            $movement_date = pstr($history['date'] ?? date('Y-m-d'));
+            $movement_remark = pstr($history['remark'] ?? 'Purchase stock updated');
+            $movement_by = pstr($history['added_by'] ?? '');
+            $ok = mysqli_query($sql, "INSERT INTO tbl_stock_movement (company_id,movement_ref,movement_type,item_type,item_id,item_name,warehouse_id,deck_id,quantity,balance_before,balance_after,transfer_group,remark,added_by,movement_date,is_deleted,c_date) VALUES ('$company_id','$movement_ref','$movement_type','$kind','$item_id','$item_name','$warehouse_id','$deck_id','$delta','$before_location','$after_location','$transfer_group','$movement_remark',".($movement_by===''?'NULL':"'$movement_by'").",'$movement_date','1','$c_date')");
+            if (!$ok) return false;
+        }
     }
     return true;
 }
@@ -67,17 +93,18 @@ if ($company_id === '') {
     case 1: // Create purchase and receive stock.
         $vendor_id = intval($data['vendor_id'] ?? 0);
         $purchase_order_id = intval($data['purchase_order_id'] ?? 0);
+        $warehouse_id = intval($data['warehouse_id'] ?? 0);
         $purchase_date = pstr($data['purchase_date'] ?? $date);
         $due_date = pstr($data['due_date'] ?? '');
         $invoice_number = pstr($data['invoice_number'] ?? '');
         $remark = pstr($data['remark'] ?? '');
         $discount = max(0, floatval($data['discount_amount'] ?? 0));
         $items = $data['items'] ?? [];
-        if ($vendor_id <= 0 || !is_array($items) || count($items) === 0) { $response = ['status'=>'error','message'=>'Select a vendor and add at least one purchase item']; break; }
+        if ($vendor_id <= 0 || $warehouse_id <= 0 || !is_array($items) || count($items) === 0) { $response = ['status'=>'error','message'=>'Select a vendor, warehouse, and add at least one purchase item']; break; }
         $vq = mysqli_query($sql, "SELECT vendor_id FROM tbl_vendor WHERE company_id='$company_id' AND vendor_id='$vendor_id' AND is_deleted='1' AND status='Active' LIMIT 1");
         if (!$vq || mysqli_num_rows($vq) === 0) { $response = ['status'=>'error','message'=>'Vendor not found or inactive']; break; }
         if ($purchase_order_id > 0) {
-            $poq = mysqli_query($sql, "SELECT purchase_order_id,vendor_id,status FROM tbl_purchase_order WHERE company_id='$company_id' AND purchase_order_id='$purchase_order_id' AND is_deleted='1' LIMIT 1");
+            $poq = mysqli_query($sql, "SELECT purchase_order_id,vendor_id,status,warehouse_id FROM tbl_purchase_order WHERE company_id='$company_id' AND purchase_order_id='$purchase_order_id' AND is_deleted='1' LIMIT 1");
             $po = $poq ? mysqli_fetch_assoc($poq) : null;
             $existing_receipt = mysqli_query($sql, "SELECT purchase_id FROM tbl_purchase WHERE company_id='$company_id' AND purchase_order_id='$purchase_order_id' AND is_deleted='1' LIMIT 1");
             if (!$po || intval($po['vendor_id']) !== $vendor_id || !in_array($po['status'], ['Pending','Approved','Received','Ordered'], true) || ($existing_receipt && mysqli_num_rows($existing_receipt) > 0)) { $response = ['status'=>'error','message'=>'The selected purchase order is invalid, cancelled, or already received']; break; }
@@ -87,9 +114,10 @@ if ($company_id === '') {
             $kind = ($item['item_type'] ?? '') === 'raw_material' ? 'raw_material' : 'product';
             $record = pitem($company_id, $kind, $item['item_id'] ?? '');
             $qty = floatval($item['quantity'] ?? 0); $price = floatval($item['unit_price'] ?? 0); $gst = max(0, min(100, floatval($item['gst_percent'] ?? 0)));
-            if (!$record || $qty <= 0 || $price < 0) { $validated = []; break; }
+            $deck_id = intval($item['deck_id'] ?? 0);
+            if (!$record || $qty <= 0 || $price < 0 || ($kind==='product' && floor($qty)!=$qty) || !pdeck($company_id,$warehouse_id,$deck_id)) { $validated = []; break; }
             $base = round($qty * $price, 2); $tax = round($base * $gst / 100, 2);
-            $validated[] = ['kind'=>$kind,'id'=>$record['item_id'],'name'=>$record['item_name'],'unit'=>$record['unit_name'] ?? '', 'qty'=>$qty,'price'=>$price,'gst'=>$gst,'tax'=>$tax,'line'=>round($base+$tax,2)];
+            $validated[] = ['kind'=>$kind,'id'=>$record['item_id'],'name'=>$record['item_name'],'unit'=>$record['unit_name'] ?? '', 'qty'=>$qty,'price'=>$price,'gst'=>$gst,'tax'=>$tax,'line'=>round($base+$tax,2),'warehouse_id'=>$warehouse_id,'deck_id'=>$deck_id];
             $subtotal += $base; $gst_total += $tax;
         }
         if (!$validated) { $response = ['status'=>'error','message'=>'One or more purchase items are invalid']; break; }
@@ -109,13 +137,17 @@ if ($company_id === '') {
         if ($ok) $ok = mysqli_query($sql, "UPDATE tbl_purchase SET purchase_number='" . pnumber('PUR-', $purchase_id) . "' WHERE purchase_id='$purchase_id' AND company_id='$company_id'");
         foreach ($validated as $line) {
             if (!$ok) break;
-            $ok = mysqli_query($sql, "INSERT INTO tbl_purchase_item (company_id,purchase_id,item_type,item_id,item_name,unit_name,quantity,unit_price,gst_percent,gst_amount,line_total,is_deleted,c_date)
-                VALUES ('$company_id','$purchase_id','{$line['kind']}','{$line['id']}','" . pstr($line['name']) . "','" . pstr($line['unit']) . "','{$line['qty']}','{$line['price']}','{$line['gst']}','{$line['tax']}','{$line['line']}','1','$c_date')");
+            $ok = mysqli_query($sql, "INSERT INTO tbl_purchase_item (company_id,purchase_id,item_type,item_id,item_name,unit_name,quantity,unit_price,gst_percent,gst_amount,line_total,warehouse_id,deck_id,is_deleted,c_date)
+                VALUES ('$company_id','$purchase_id','{$line['kind']}','{$line['id']}','" . pstr($line['name']) . "','" . pstr($line['unit']) . "','{$line['qty']}','{$line['price']}','{$line['gst']}','{$line['tax']}','{$line['line']}','{$line['warehouse_id']}','{$line['deck_id']}','1','$c_date')");
             if ($ok) $ok = pstock($company_id, $line['kind'], $line['id'], $line['qty'], [
                 'date' => $data['purchase_date'] ?? $date,
                 'remark' => !empty($data['remark']) ? $data['remark'] : 'Purchase received ' . pnumber('PUR-', $purchase_id),
                 'added_by' => $data['emp_id'] ?? '',
                 'purchase_id' => $purchase_id,
+                'warehouse_id' => $line['warehouse_id'],
+                'deck_id' => $line['deck_id'],
+                'movement_type' => 'Purchase',
+                'item_name' => $line['name'],
             ]);
         }
         if ($ok) { mysqli_commit($sql); $response = ['status'=>'success','message'=>'Purchase saved and stock updated','purchase_id'=>$purchase_id,'purchase_number'=>pnumber('PUR-',$purchase_id),'total_amount'=>$total]; }
@@ -174,7 +206,12 @@ if ($company_id === '') {
         foreach($lines as $line) {
             if(!$ok) break; $src=$line['source'];
             $ok=mysqli_query($sql,"INSERT INTO tbl_purchase_return_item (company_id,return_id,purchase_id,purchase_item_id,item_type,item_id,item_name,quantity,unit_price,gst_percent,line_total,is_deleted,c_date) VALUES ('$company_id','$return_id','$purchase_id','{$src['purchase_item_id']}','{$src['item_type']}','{$src['item_id']}','".pstr($src['item_name'])."','{$line['qty']}','{$src['unit_price']}','{$src['gst_percent']}','{$line['total']}','1','$c_date')");
-            if($ok) $ok=pstock($company_id,$src['item_type'],$src['item_id'],-$line['qty']);
+            if($ok) $ok=pstock($company_id,$src['item_type'],$src['item_id'],-$line['qty'],[
+                'date'=>$return_date,'remark'=>$remark!==''?$remark:'Purchase return '.$return_id,
+                'added_by'=>$data['emp_id']??'','purchase_id'=>$purchase_id,
+                'warehouse_id'=>$src['warehouse_id']??0,'deck_id'=>$src['deck_id']??0,
+                'movement_type'=>'Purchase Return','item_name'=>$src['item_name']??''
+            ]);
         }
         if($ok) { mysqli_commit($sql); $response=['status'=>'success','message'=>'Purchase return saved and stock adjusted','return_id'=>$return_id,'return_number'=>pnumber('PRET-',$return_id)]; }
         else { mysqli_rollback($sql); $response=['status'=>'error','message'=>'Return could not be saved; stock was not changed. Check available stock.']; }
@@ -216,13 +253,14 @@ if ($company_id === '') {
 
     case 11: // Edit a purchase and apply only stock quantity differences.
         $purchase_id=intval($data['purchase_id'] ?? 0);
+        $warehouse_id=intval($data['warehouse_id'] ?? 0);
         $purchase_date=pstr($data['purchase_date'] ?? $date);
         $due_date=pstr($data['due_date'] ?? '');
         $invoice_number=pstr($data['invoice_number'] ?? '');
         $remark=pstr($data['remark'] ?? '');
         $discount=max(0,floatval($data['discount_amount'] ?? 0));
         $items=$data['items'] ?? [];
-        if($purchase_id<=0 || !is_array($items) || count($items)===0) { $response=['status'=>'error','message'=>'Purchase ID and at least one item are required']; break; }
+        if($purchase_id<=0 || $warehouse_id<=0 || !is_array($items) || count($items)===0) { $response=['status'=>'error','message'=>'Purchase ID, warehouse, and at least one item are required']; break; }
         $existingQ=mysqli_query($sql,"SELECT purchase_number FROM tbl_purchase WHERE company_id='$company_id' AND purchase_id='$purchase_id' AND is_deleted='1' LIMIT 1");
         $existingPurchase=$existingQ ? mysqli_fetch_assoc($existingQ) : null;
         if(!$existingPurchase) { $response=['status'=>'error','message'=>'Purchase not found']; break; }
@@ -234,9 +272,10 @@ if ($company_id === '') {
             $kind=($item['item_type'] ?? '')==='raw_material' ? 'raw_material' : 'product';
             $record=pitem($company_id,$kind,$item['item_id'] ?? '');
             $qty=floatval($item['quantity'] ?? 0); $price=floatval($item['unit_price'] ?? 0); $gst=max(0,min(100,floatval($item['gst_percent'] ?? 0)));
-            if(!$record || $qty<=0 || $price<0) { $validated=[]; break; }
+            $deck_id=intval($item['deck_id'] ?? 0);
+            if(!$record || $qty<=0 || $price<0 || ($kind==='product' && floor($qty)!=$qty) || !pdeck($company_id,$warehouse_id,$deck_id)) { $validated=[]; break; }
             $base=round($qty*$price,2); $tax=round($base*$gst/100,2);
-            $validated[]=['kind'=>$kind,'id'=>$record['item_id'],'name'=>$record['item_name'],'unit'=>$record['unit_name'] ?? '', 'qty'=>$qty,'price'=>$price,'gst'=>$gst,'tax'=>$tax,'line'=>round($base+$tax,2)];
+            $validated[]=['kind'=>$kind,'id'=>$record['item_id'],'name'=>$record['item_name'],'unit'=>$record['unit_name'] ?? '', 'qty'=>$qty,'price'=>$price,'gst'=>$gst,'tax'=>$tax,'line'=>round($base+$tax,2),'warehouse_id'=>$warehouse_id,'deck_id'=>$deck_id];
             $subtotal+=$base; $gst_total+=$tax;
         }
         if(!$validated) { $response=['status'=>'error','message'=>'One or more purchase items are invalid']; break; }
@@ -244,16 +283,16 @@ if ($company_id === '') {
         mysqli_begin_transaction($sql);
         $lockQ=mysqli_query($sql,"SELECT purchase_number FROM tbl_purchase WHERE company_id='$company_id' AND purchase_id='$purchase_id' AND is_deleted='1' FOR UPDATE");
         $lockRow=$lockQ ? mysqli_fetch_assoc($lockQ) : null;
-        $oldItemsQ=mysqli_query($sql,"SELECT item_type,item_id,quantity FROM tbl_purchase_item WHERE company_id='$company_id' AND purchase_id='$purchase_id' AND is_deleted='1' FOR UPDATE");
+        $oldItemsQ=mysqli_query($sql,"SELECT item_type,item_id,quantity,warehouse_id,deck_id,item_name FROM tbl_purchase_item WHERE company_id='$company_id' AND purchase_id='$purchase_id' AND is_deleted='1' FOR UPDATE");
         $stockDeltas=[];
         if($oldItemsQ) while($old=mysqli_fetch_assoc($oldItemsQ)) {
-            $key=$old['item_type'].'|'.$old['item_id'];
-            if(!isset($stockDeltas[$key])) $stockDeltas[$key]=['kind'=>$old['item_type'],'id'=>$old['item_id'],'delta'=>0];
+            $key=$old['item_type'].'|'.$old['item_id'].'|'.intval($old['warehouse_id']??0).'|'.intval($old['deck_id']??0);
+            if(!isset($stockDeltas[$key])) $stockDeltas[$key]=['kind'=>$old['item_type'],'id'=>$old['item_id'],'name'=>$old['item_name'],'warehouse_id'=>intval($old['warehouse_id']??0),'deck_id'=>intval($old['deck_id']??0),'delta'=>0];
             $stockDeltas[$key]['delta']-=floatval($old['quantity']);
         }
         foreach($validated as $line) {
-            $key=$line['kind'].'|'.$line['id'];
-            if(!isset($stockDeltas[$key])) $stockDeltas[$key]=['kind'=>$line['kind'],'id'=>$line['id'],'delta'=>0];
+            $key=$line['kind'].'|'.$line['id'].'|'.$line['warehouse_id'].'|'.$line['deck_id'];
+            if(!isset($stockDeltas[$key])) $stockDeltas[$key]=['kind'=>$line['kind'],'id'=>$line['id'],'name'=>$line['name'],'warehouse_id'=>$line['warehouse_id'],'deck_id'=>$line['deck_id'],'delta'=>0];
             $stockDeltas[$key]['delta']+=$line['qty'];
         }
         $dueSql=$due_date===''?'NULL':"'$due_date'";
@@ -261,7 +300,7 @@ if ($company_id === '') {
         if($ok) $ok=mysqli_query($sql,"UPDATE tbl_purchase_item SET is_deleted='0' WHERE company_id='$company_id' AND purchase_id='$purchase_id' AND is_deleted='1'");
         foreach($validated as $line) {
             if(!$ok) break;
-            $ok=mysqli_query($sql,"INSERT INTO tbl_purchase_item (company_id,purchase_id,item_type,item_id,item_name,unit_name,quantity,unit_price,gst_percent,gst_amount,line_total,is_deleted,c_date) VALUES ('$company_id','$purchase_id','{$line['kind']}','{$line['id']}','".pstr($line['name'])."','".pstr($line['unit'])."','{$line['qty']}','{$line['price']}','{$line['gst']}','{$line['tax']}','{$line['line']}','1','$c_date')");
+            $ok=mysqli_query($sql,"INSERT INTO tbl_purchase_item (company_id,purchase_id,item_type,item_id,item_name,unit_name,quantity,unit_price,gst_percent,gst_amount,line_total,warehouse_id,deck_id,is_deleted,c_date) VALUES ('$company_id','$purchase_id','{$line['kind']}','{$line['id']}','".pstr($line['name'])."','".pstr($line['unit'])."','{$line['qty']}','{$line['price']}','{$line['gst']}','{$line['tax']}','{$line['line']}','{$line['warehouse_id']}','{$line['deck_id']}','1','$c_date')");
         }
         foreach($stockDeltas as $movement) {
             if(!$ok || abs($movement['delta'])<0.0001) continue;
@@ -270,6 +309,10 @@ if ($company_id === '') {
                 'remark'=>!empty($data['remark'])?$data['remark']:'Purchase edited '.$existingPurchase['purchase_number'],
                 'added_by'=>$data['emp_id'] ?? '',
                 'purchase_id'=>$purchase_id,
+                'warehouse_id'=>$movement['warehouse_id']?:null,
+                'deck_id'=>$movement['deck_id']?:null,
+                'movement_type'=>$movement['delta']<0?'Purchase Return':'Purchase',
+                'item_name'=>$movement['name']??'',
             ]);
         }
         if($ok) { mysqli_commit($sql); $response=['status'=>'success','message'=>'Purchase updated; stock history and vendor balance were recalculated','purchase_id'=>$purchase_id,'total_amount'=>$total]; }

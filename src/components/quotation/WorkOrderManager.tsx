@@ -188,7 +188,7 @@ export function WorkOrderManager({
   return (
     <>
       <Dialog open={open && !initialProduct} onOpenChange={(nextOpen) => { if (nextOpen) setActiveProduct(null); onOpenChange(nextOpen); }}>
-        <DialogContent className="w-[calc(100%-1rem)] sm:max-w-5xl max-h-[90dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
+        <DialogContent onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()} className="w-[calc(100%-1rem)] sm:max-w-5xl max-h-[90dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
           <DialogHeader className="pr-8">
             <DialogTitle className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" />Work Orders</DialogTitle>
             <DialogDescription>{quotationNumber ? `Products in ${quotationNumber}` : "Product production details"}</DialogDescription>
@@ -234,11 +234,14 @@ export function WorkOrderManager({
           ) : (
             <p className="py-10 text-center text-sm text-muted-foreground">No products are available for work orders.</p>
           )}
+          <div className="flex justify-end border-t pt-4">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(activeProduct)} onOpenChange={(isOpen) => { if (!isOpen) { setActiveProduct(null); if (initialProduct) onOpenChange(false); } }}>
-        <DialogContent className="w-[calc(100%-1rem)] sm:max-w-3xl max-h-[92dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
+        <DialogContent onInteractOutside={(event) => event.preventDefault()} onEscapeKeyDown={(event) => event.preventDefault()} className="w-[calc(100%-1rem)] sm:max-w-3xl max-h-[92dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
           <DialogHeader className="pr-8">
             <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary" />Product Status & History</DialogTitle>
             <DialogDescription className="break-words">

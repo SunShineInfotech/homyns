@@ -44,6 +44,7 @@ import RawMaterialTypes from "./pages/RawMaterialTypes";
 import Units from "./pages/Units";
 import Brands from "./pages/Brands";
 import Dashboard from "./pages/Dashboard";
+import FinanceDashboard from "./pages/FinanceDashboard";
 import QuotationView from "./pages/QuotationView";
 import QuotationEdit from "./pages/QuotationEdit";
 import QuotationHistory from "./pages/QuotationHistory";
@@ -62,6 +63,7 @@ import RoomForm from "./pages/RoomForm";
 import States from "./pages/States";
 import Cities from "./pages/Cities";
 import Areas from "./pages/Areas";
+import WorkTypes from "./pages/WorkTypes";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
@@ -77,6 +79,7 @@ import PurchaseOrderPage from "./pages/PurchaseOrderPage";
 import InvoiceView from "./pages/InvoiceView";
 import { AccountTransactionReportPage, ExpenseCategoriesPage, FinanceAccountsPage, FinanceAccountTransferPage, OtherExpensesPage, OtherIncomePage, OtherExpenseFormPage, OtherIncomeFormPage, TransactionReportsPage } from "./pages/Finance";
 import { AllAttendancePage, AttendanceReportPage, AttendanceSheetPage, MyAttendancePage } from "./pages/Attendance";
+import { AgenciesPage, AgencyFormPage, AgencyTransactionsPage } from "./pages/Agencies";
 const Create3DQuotationPage = lazy(() => import("./pages/Create3DQuotation"));
 const StockModulePage = lazy(() => import("./pages/StockModulePage"));
 
@@ -161,6 +164,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              <Route path="/finance/dashboard" element={<ProtectedRoute><FinanceDashboard /></ProtectedRoute>} />
 
               <Route
                 path="/welcome"
@@ -214,6 +218,10 @@ const App = () => {
               <Route path="/vendors/new" element={<ProtectedRoute><VendorFormPage /></ProtectedRoute>} />
               <Route path="/vendors/:vendorId/edit" element={<ProtectedRoute><VendorFormPage /></ProtectedRoute>} />
               <Route path="/vendors/:vendorId/transactions" element={<ProtectedRoute><VendorTransactionsPage /></ProtectedRoute>} />
+              <Route path="/agencies" element={<ProtectedRoute><AgenciesPage /></ProtectedRoute>} />
+              <Route path="/agencies/new" element={<ProtectedRoute><AgencyFormPage /></ProtectedRoute>} />
+              <Route path="/agencies/:agencyId/edit" element={<ProtectedRoute><AgencyFormPage /></ProtectedRoute>} />
+              <Route path="/agencies/:agencyId/transactions" element={<ProtectedRoute><AgencyTransactionsPage /></ProtectedRoute>} />
               <Route path="/payment-reminders" element={<ProtectedRoute><PaymentRemindersPage /></ProtectedRoute>} />
               <Route path="/purchase-orders" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
               <Route path="/purchase-orders/new" element={<ProtectedRoute><PurchaseOrderPage /></ProtectedRoute>} />
@@ -238,8 +246,8 @@ const App = () => {
               <Route path="/finance/income/new" element={<ProtectedRoute><OtherIncomeFormPage /></ProtectedRoute>} />
               <Route path="/finance/income/:transactionId/edit" element={<ProtectedRoute><OtherIncomeFormPage /></ProtectedRoute>} />
               <Route path="/stock/warehouses" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
-              <Route path="/stock/in" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
               <Route path="/stock/out" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
+              <Route path="/stock/dead" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
               <Route path="/stock/transfer" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
               <Route path="/stock/ledger" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
               <Route path="/stock/all" element={<ProtectedRoute><Suspense fallback={<LoadingScreen />}><StockModulePage /></Suspense></ProtectedRoute>} />
@@ -724,6 +732,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              <Route path="/work-types" element={<ProtectedRoute><WorkTypes /></ProtectedRoute>} />
 
               {/* Settings & Profile */}
               <Route

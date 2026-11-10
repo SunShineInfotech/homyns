@@ -102,6 +102,7 @@ export default function ProductForm() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [existingProducts, setExistingProducts] = useState<Product[]>([]);
   const [loadingMasters, setLoadingMasters] = useState(true);
 
   const [productDetails, setProductDetails] = useState<ExtendedProductDetail[]>(
@@ -148,10 +149,11 @@ export default function ProductForm() {
           });
           return;
         }
-        const [catRes, matRes, unitRes] = await Promise.all([
+        const [catRes, matRes, unitRes, productRes] = await Promise.all([
           productCategoryService.getCategories(companyId),
           rawMaterialService.getRawMaterials(companyId),
           unitService.getUnits(companyId),
+          productService.getProducts(companyId),
         ]);
         if (catRes.status === "success" && catRes.data)
           setCategories(catRes.data);
@@ -159,6 +161,8 @@ export default function ProductForm() {
           setRawMaterials(matRes.data);
         if (unitRes.status === "success" && unitRes.data)
           setUnits(unitRes.data);
+        if (productRes.status === "success" && productRes.data)
+          setExistingProducts(productRes.data);
 
         // Set default category if only one exists and in add mode
         if (!isEditMode && !isViewMode && catRes.data?.length === 1) {
@@ -198,6 +202,7 @@ export default function ProductForm() {
         }
         const response = await productService.getProducts(companyId);
         if (response.status === "success" && response.data) {
+          setExistingProducts(response.data);
           const product = response.data.find((p) => p.product_id === id);
           if (product) {
             setFormData({
@@ -565,6 +570,15 @@ export default function ProductForm() {
       ? "Update product information"
       : "Add new product";
 
+  const normalizedProductName = (formData.product_name || "").trim().toLocaleLowerCase();
+  const duplicateProduct = normalizedProductName
+    ? existingProducts.find(
+        (product) =>
+          String(product.product_id || "") !== String(formData.product_id || "") &&
+          product.product_name.trim().toLocaleLowerCase() === normalizedProductName,
+      )
+    : undefined;
+
   if (loading || loadingMasters) {
     return (
       <MainLayout title={title} subtitle="Loading...">
@@ -607,6 +621,12 @@ export default function ProductForm() {
                   disabled={isViewMode}
                   required
                 />
+                {duplicateProduct && (
+                  <p className="mt-1 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    A product named “{duplicateProduct.product_name}” is already added. You can still save this product.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="category_id">

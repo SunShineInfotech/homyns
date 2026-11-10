@@ -231,6 +231,45 @@ if ($company_id === '') {
         else { mysqli_rollback($sql); $response = financeFail('Could not complete account transfer'); }
         break;
 
+    case 12: // Finance dashboard: all-time balances plus date-filtered income/expense analytics.
+        $from = fesc($data['from_date'] ?? ''); $to = fesc($data['to_date'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) || $from > $to) {
+            $response = financeFail('Select a valid start and end date'); break;
+        }
+        $counts = ['customers' => 0, 'vendors' => 0, 'agencies' => 0, 'other_income' => 0, 'other_expense' => 0];
+        $countQueries = [
+            'customers' => "SELECT COUNT(*) n FROM tbl_client WHERE company_id='$company_id' AND is_deleted='1'",
+            'vendors' => "SELECT COUNT(*) n FROM tbl_vendor WHERE company_id='$company_id' AND is_deleted='1'",
+            'agencies' => "SELECT COUNT(*) n FROM tbl_agency WHERE company_id='$company_id' AND is_deleted='1'",
+            'other_income' => "SELECT COUNT(*) n FROM tbl_transaction WHERE company_id='$company_id' AND transaction_type=4 AND is_deleted='1' AND transaction_date BETWEEN '$from' AND '$to'",
+            'other_expense' => "SELECT COUNT(*) n FROM tbl_transaction WHERE company_id='$company_id' AND transaction_type=3 AND is_deleted='1' AND transaction_date BETWEEN '$from' AND '$to'"
+        ];
+        foreach ($countQueries as $key => $query) { $q = fresult($query); if ($q && ($r = mysqli_fetch_assoc($q))) $counts[$key] = intval($r['n']); }
+
+        $customerRows = []; $vendorRows = []; $agencyRows = [];
+        $q = fresult("SELECT client_id id,client_name name,GREATEST(COALESCE(wallet,0),0) amount FROM tbl_client WHERE company_id='$company_id' AND is_deleted='1' AND wallet>0 ORDER BY wallet DESC,client_name ASC LIMIT 10");
+        if ($q) while ($r = mysqli_fetch_assoc($q)) $customerRows[] = ['id'=>(string)$r['id'],'name'=>$r['name'],'amount'=>(float)$r['amount']];
+        $q = fresult("SELECT v.vendor_id id,v.vendor_name name,GREATEST(v.wallet+COALESCE(p.purchases,0)-COALESCE(r.returns_total,0)-COALESCE(pm.payments,0),0) amount FROM tbl_vendor v LEFT JOIN (SELECT company_id,vendor_id,SUM(total_amount) purchases FROM tbl_purchase WHERE is_deleted='1' GROUP BY company_id,vendor_id) p ON p.company_id=v.company_id AND p.vendor_id=v.vendor_id LEFT JOIN (SELECT company_id,vendor_id,SUM(total_amount) returns_total FROM tbl_purchase_return WHERE is_deleted='1' GROUP BY company_id,vendor_id) r ON r.company_id=v.company_id AND r.vendor_id=v.vendor_id LEFT JOIN (SELECT company_id,vendor_id,SUM(amount) payments FROM tbl_purchase_payment WHERE is_deleted='1' GROUP BY company_id,vendor_id) pm ON pm.company_id=v.company_id AND pm.vendor_id=v.vendor_id WHERE v.company_id='$company_id' AND v.is_deleted='1' ORDER BY amount DESC,v.vendor_name ASC LIMIT 10");
+        if ($q) while ($r = mysqli_fetch_assoc($q)) $vendorRows[] = ['id'=>(string)$r['id'],'name'=>$r['name'],'amount'=>(float)$r['amount']];
+        $q = fresult("SELECT agency_id id,agency_name name,GREATEST(COALESCE(wallet,0),0) amount FROM tbl_agency WHERE company_id='$company_id' AND is_deleted='1' AND wallet>0 ORDER BY wallet DESC,agency_name ASC LIMIT 10");
+        if ($q) while ($r = mysqli_fetch_assoc($q)) $agencyRows[] = ['id'=>(string)$r['id'],'name'=>$r['name'],'amount'=>(float)$r['amount']];
+
+        $monthly = [];
+        $q = fresult("SELECT DATE_FORMAT(transaction_date,'%Y-%m') month,SUM(CASE WHEN transaction_type=4 THEN transaction_amount ELSE 0 END) income,SUM(CASE WHEN transaction_type=3 THEN transaction_amount ELSE 0 END) expense FROM tbl_transaction WHERE company_id='$company_id' AND is_deleted='1' AND transaction_type IN (3,4) AND transaction_date BETWEEN '$from' AND '$to' GROUP BY DATE_FORMAT(transaction_date,'%Y-%m') ORDER BY month ASC");
+        if ($q) while ($r = mysqli_fetch_assoc($q)) $monthly[] = ['month'=>$r['month'],'income'=>(float)$r['income'],'expense'=>(float)$r['expense']];
+        $categoryRows = [];
+        $q = fresult("SELECT COALESCE(c.expenses_categories_title,'Uncategorised') name,SUM(t.transaction_amount) amount FROM tbl_transaction t LEFT JOIN tbl_expenses_categories c ON c.expenses_categories_id=t.transaction_expense_category_id AND c.company_id=t.company_id WHERE t.company_id='$company_id' AND t.is_deleted='1' AND t.transaction_type=3 AND t.transaction_date BETWEEN '$from' AND '$to' GROUP BY t.transaction_expense_category_id,c.expenses_categories_title ORDER BY amount DESC");
+        if ($q) while ($r = mysqli_fetch_assoc($q)) $categoryRows[] = ['name'=>$r['name'],'amount'=>(float)$r['amount']];
+        $totals = ['customer_outstanding'=>0, 'vendor_outstanding'=>0, 'agency_pending'=>0, 'other_income'=>0, 'other_expense'=>0];
+        $q = fresult("SELECT COALESCE(SUM(GREATEST(wallet,0)),0) total FROM tbl_client WHERE company_id='$company_id' AND is_deleted='1'"); if ($q && ($r=mysqli_fetch_assoc($q))) $totals['customer_outstanding']=(float)$r['total'];
+        $q = fresult("SELECT COALESCE(SUM(GREATEST(v.wallet+COALESCE(p.purchases,0)-COALESCE(r.returns_total,0)-COALESCE(pm.payments,0),0)),0) total FROM tbl_vendor v LEFT JOIN (SELECT company_id,vendor_id,SUM(total_amount) purchases FROM tbl_purchase WHERE is_deleted='1' GROUP BY company_id,vendor_id) p ON p.company_id=v.company_id AND p.vendor_id=v.vendor_id LEFT JOIN (SELECT company_id,vendor_id,SUM(total_amount) returns_total FROM tbl_purchase_return WHERE is_deleted='1' GROUP BY company_id,vendor_id) r ON r.company_id=v.company_id AND r.vendor_id=v.vendor_id LEFT JOIN (SELECT company_id,vendor_id,SUM(amount) payments FROM tbl_purchase_payment WHERE is_deleted='1' GROUP BY company_id,vendor_id) pm ON pm.company_id=v.company_id AND pm.vendor_id=v.vendor_id WHERE v.company_id='$company_id' AND v.is_deleted='1'");
+        if ($q && ($r=mysqli_fetch_assoc($q))) $totals['vendor_outstanding']=(float)$r['total'];
+        $q = fresult("SELECT COALESCE(SUM(GREATEST(wallet,0)),0) total FROM tbl_agency WHERE company_id='$company_id' AND is_deleted='1'"); if ($q && ($r=mysqli_fetch_assoc($q))) $totals['agency_pending']=(float)$r['total'];
+        $q = fresult("SELECT COALESCE(SUM(CASE WHEN transaction_type=4 THEN transaction_amount ELSE 0 END),0) income,COALESCE(SUM(CASE WHEN transaction_type=3 THEN transaction_amount ELSE 0 END),0) expense FROM tbl_transaction WHERE company_id='$company_id' AND is_deleted='1' AND transaction_type IN (3,4) AND transaction_date BETWEEN '$from' AND '$to'");
+        if ($q && ($r=mysqli_fetch_assoc($q))) { $totals['other_income']=(float)$r['income']; $totals['other_expense']=(float)$r['expense']; }
+        $response = financeSuccess('Finance dashboard fetched', ['data'=>['counts'=>$counts,'totals'=>$totals,'customers'=>$customerRows,'vendors'=>$vendorRows,'agencies'=>$agencyRows,'monthly'=>$monthly,'expense_categories'=>$categoryRows]]);
+        break;
+
     default:
         $response = financeFail('Unsupported request type');
 }

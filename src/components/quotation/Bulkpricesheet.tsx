@@ -6,13 +6,15 @@
 //    sticky header + sticky footer (grand total + save).
 import {
   Dispatch,
-  PointerEvent as ReactPointerEvent,
+  ReactNode,
   SetStateAction,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -34,6 +36,7 @@ import {
   Ruler,
   Save,
   Trash2,
+  GripVertical,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -189,7 +192,22 @@ interface BulkPriceSheetProps {
 
   onAddRoom: () => void;
   onAddProduct: (qrId: string) => void;
+  availableRooms?: any[];
+  availableProducts?: any[];
+  rawMaterialMaster?: any[];
+  materialsByProduct?: Record<string, any[]>;
+  onMaterialsByProductChange?: Dispatch<SetStateAction<Record<string, any[]>>>;
+  onMaterialChangesChange?: Dispatch<SetStateAction<string[]>>;
+  onAddRoomById?: (roomId: string) => void;
+  onDeleteRoom?: (qrId: string) => void;
+  onRoomsReorder?: (rooms: any[]) => void;
+  onAddProductById?: (qrId: string, productId: string, qty: number) => void;
   onSave: () => void;
+}
+
+function SortableBulkRoom({ id, children }: { id: string; children: (sortable: any) => ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.55 : 1 }}>{children({ attributes, listeners })}</div>;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -219,34 +237,36 @@ export function BulkPriceSheet({
   getQtyTypeLabel,
   onAddRoom,
   onAddProduct,
+  availableRooms = [],
+  availableProducts = [],
+  rawMaterialMaster = [],
+  materialsByProduct = {},
+  onMaterialsByProductChange,
+  onMaterialChangesChange,
+  onAddRoomById,
+  onDeleteRoom,
+  onRoomsReorder,
+  onAddProductById,
   onSave,
 }: BulkPriceSheetProps) {
   const isDesktop = useIsDesktop();
 
-  // Drag-to-dismiss state (mobile/tablet only)
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const [closingByDrag, setClosingByDrag] = useState(false);
-  const dragStart = useRef<{ y: number; t: number } | null>(null);
-  const closeTimer = useRef<number | null>(null);
-
   const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(new Set());
+  const [addingRoom, setAddingRoom] = useState("");
+  const [addingProducts, setAddingProducts] = useState<Record<string, string>>({});
+  const [addingQty, setAddingQty] = useState<Record<string, string>>({});
+  const [newMaterialIds, setNewMaterialIds] = useState<Record<string, string>>({});
+  const [newMaterialQtys, setNewMaterialQtys] = useState<Record<string, string>>({});
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   useEffect(() => {
     if (open) {
-      setDragY(0);
-      setDragging(false);
-      setClosingByDrag(false);
       setCollapsedRooms(new Set());
     }
   }, [open]);
-
-  useEffect(
-    () => () => {
-      if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    },
-    [],
-  );
 
   // ─── Item helpers ──────────────────────────────────────────────────
   const visibleItems = (room: any) =>
@@ -296,35 +316,6 @@ export function BulkPriceSheet({
     (count: number, room: any) => count + visibleItems(room).length,
     0,
   );
-
-  // ─── Drag handlers ─────────────────────────────────────────────────
-  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (isDesktop || saving) return;
-    dragStart.current = { y: e.clientY, t: Date.now() };
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDragging(true);
-  };
-
-  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragStart.current) return;
-    setDragY(Math.max(0, e.clientY - dragStart.current.y));
-  };
-
-  const handlePointerUp = () => {
-    if (!dragStart.current) return;
-    const elapsed = Math.max(1, Date.now() - dragStart.current.t);
-    const velocity = dragY / elapsed;
-    dragStart.current = null;
-    setDragging(false);
-
-    if ((dragY > 120 || velocity > 0.6) && !saving) {
-      setClosingByDrag(true);
-      setDragY(window.innerHeight);
-      closeTimer.current = window.setTimeout(() => onOpenChange(false), 260);
-    } else {
-      setDragY(0);
-    }
-  };
 
   // ─── Shared field renderers ────────────────────────────────────────
   const inputCls = "h-11 rounded-xl text-base lg:h-9 lg:rounded-lg lg:text-sm";
@@ -457,6 +448,37 @@ export function BulkPriceSheet({
     merged.qty_type === "Fixed"
       ? `${merged.qty || 0} NOS`
       : `${calculateTotalMeasure(merged).toFixed(2)} sq.ft`;
+
+  const updateMaterials = (qpId: string, next: any[]) => {
+    onMaterialsByProductChange?.(current => ({ ...current, [qpId]: next }));
+    onMaterialChangesChange?.(current => current.includes(qpId) ? current : [...current, qpId]);
+  };
+  const renderMaterialsEditor = (item: any) => {
+    const key = String(item.qp_id);
+    const materials = materialsByProduct[key] || [];
+    return <div className="mt-2 rounded-xl border bg-muted/20 p-3" key={`materials-${key}`}>
+      <p className="mb-2 text-xs font-semibold">Raw Materials</p>
+      <div className="space-y-2">{materials.map((material: any) => <div key={material.rm_id} className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-xs">{material.rm_name}{material.unit ? ` (${material.unit})` : ""}</span>
+        <Input className="h-8 w-24" type="number" min="0.001" step="0.001" value={material.required_qty} onChange={e => updateMaterials(key, materials.map((row: any) => row.rm_id === material.rm_id ? { ...row, required_qty: e.target.value } : row))} aria-label={`${material.rm_name} quantity`} />
+        <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive" aria-label={`Remove ${material.rm_name}`} onClick={() => updateMaterials(key, materials.filter((row: any) => row.rm_id !== material.rm_id))}><Trash2 className="h-4 w-4" /></Button>
+      </div>)}</div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Select value={newMaterialIds[key] || ""} onValueChange={value => setNewMaterialIds(current => ({ ...current, [key]: value }))}><SelectTrigger className="h-9 min-w-48 flex-1 text-xs"><SelectValue placeholder="Choose raw material" /></SelectTrigger><SelectContent>{rawMaterialMaster.filter((rm: any) => !materials.some((row: any) => String(row.rm_id) === String(rm.rm_id))).map((rm: any) => <SelectItem key={rm.rm_id} value={String(rm.rm_id)}>{rm.rm_name}</SelectItem>)}</SelectContent></Select>
+        <Input className="h-9 w-24" type="number" min="0.001" step="0.001" placeholder="Qty" value={newMaterialQtys[key] || ""} onChange={e => setNewMaterialQtys(current => ({ ...current, [key]: e.target.value }))} />
+        <Button type="button" size="sm" variant="outline" className="h-9" disabled={!newMaterialIds[key] || !(Number(newMaterialQtys[key]) > 0)} onClick={() => { const master = rawMaterialMaster.find((rm: any) => String(rm.rm_id) === newMaterialIds[key]); if (!master) return; updateMaterials(key, [...materials, { rm_id: String(master.rm_id), rm_name: master.rm_name, brand_name: master.brand_name, unit: master.unit_name || "", required_qty: newMaterialQtys[key] }]); setNewMaterialIds(current => ({ ...current, [key]: "" })); setNewMaterialQtys(current => ({ ...current, [key]: "" })); }}><Plus className="mr-1 h-3.5 w-3.5" />Add material</Button>
+      </div>
+    </div>;
+  };
+  const renderMaterialsRow = (item: any) => <tr key={`materials-${item.qp_id}`}><td colSpan={8} className="px-3 pb-3">{renderMaterialsEditor(item)}</td></tr>;
+
+  const handleRoomDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !onRoomsReorder) return;
+    const oldIndex = rooms.findIndex((room: any) => String(room.qr_id) === String(active.id));
+    const newIndex = rooms.findIndex((room: any) => String(room.qr_id) === String(over.id));
+    if (oldIndex >= 0 && newIndex >= 0) onRoomsReorder(arrayMove(rooms, oldIndex, newIndex));
+  };
 
   // ─── Mobile / tablet card ──────────────────────────────────────────
   const renderItemCard = (item: any) => {
@@ -627,28 +649,15 @@ export function BulkPriceSheet({
         "data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom data-[state=open]:duration-500",
         "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom data-[state=closed]:duration-300",
         "ease-[cubic-bezier(0.32,0.72,0,1)]",
-        closingByDrag && "data-[state=closed]:animate-none",
       );
 
-  const sheetStyle = !isDesktop
-    ? {
-        transform: dragY ? `translate3d(0, ${dragY}px, 0)` : undefined,
-        transition: dragging
-          ? "none"
-          : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)",
-      }
-    : undefined;
+  const sheetStyle = undefined;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=open]:duration-300"
-          style={
-            !isDesktop && dragY
-              ? { opacity: Math.max(0.2, 1 - dragY / 600) }
-              : undefined
-          }
         />
         <DialogPrimitive.Content
           className={contentClass}
@@ -657,25 +666,12 @@ export function BulkPriceSheet({
           onOpenAutoFocus={(e) => {
             if (!isDesktop) e.preventDefault();
           }}
-          onInteractOutside={(e) => {
-            if (saving) e.preventDefault();
-          }}
-          onEscapeKeyDown={(e) => {
-            if (saving) e.preventDefault();
-          }}
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           {/* ── Header (drag area on mobile) ── */}
           <div className="shrink-0 border-b bg-background">
-            <div
-              className={cn(
-                !isDesktop &&
-                  "cursor-grab touch-none select-none active:cursor-grabbing",
-              )}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-            >
+            <div>
               {!isDesktop && (
                 <div className="flex justify-center pb-1 pt-3">
                   <span className="h-1.5 w-12 rounded-full bg-muted-foreground/30" />
@@ -709,7 +705,7 @@ export function BulkPriceSheet({
                 </DialogPrimitive.Close>
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2 px-4 pb-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-6">
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="secondary" className="rounded-full text-[11px]">
                   {rooms.length} {rooms.length === 1 ? "room" : "rooms"}
@@ -718,17 +714,13 @@ export function BulkPriceSheet({
                   {totalItems} {totalItems === 1 ? "product" : "products"}
                 </Badge>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1 rounded-full"
-                onClick={onAddRoom}
-                disabled={saving}
-              >
-                <Plus className="h-4 w-4" />
-                Add Room
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select value={addingRoom} onValueChange={setAddingRoom}>
+                  <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="Choose room" /></SelectTrigger>
+                  <SelectContent>{availableRooms.map((room: any) => <SelectItem key={room.room_id} value={String(room.room_id)}>{room.room_name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1 rounded-full" disabled={saving || !addingRoom} onClick={() => { onAddRoomById?.(addingRoom); setAddingRoom(""); }}><Plus className="h-4 w-4" />Add Room</Button>
+              </div>
             </div>
           </div>
 
@@ -739,7 +731,9 @@ export function BulkPriceSheet({
                 This quotation has no rooms yet. Add a room to begin.
               </div>
             ) : (
-              rooms.map((room: any) => {
+              <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleRoomDragEnd}>
+              <SortableContext items={rooms.map((room: any) => String(room.qr_id))} strategy={verticalListSortingStrategy}>
+              {rooms.map((room: any, roomIndex: number) => {
                 const qrId = String(room.qr_id);
                 const items = visibleItems(room);
                 const collapsed = collapsedRooms.has(qrId);
@@ -749,11 +743,10 @@ export function BulkPriceSheet({
                 );
 
                 return (
-                  <section
-                    key={qrId}
-                    className="overflow-hidden rounded-2xl border bg-card shadow-sm"
-                  >
+                  <SortableBulkRoom key={qrId} id={qrId}>
+                  {({ attributes, listeners }: any) => <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
                     <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2.5 sm:px-4">
+                      <button type="button" className="touch-none cursor-grab rounded p-1 text-muted-foreground hover:text-foreground active:cursor-grabbing" aria-label={`Move Room ${roomIndex + 1}`} {...attributes} {...listeners}><GripVertical className="h-4 w-4" /></button>
                       <button
                         type="button"
                         onClick={() => toggleRoom(qrId)}
@@ -768,7 +761,7 @@ export function BulkPriceSheet({
                         <Building2 className="h-4 w-4 shrink-0 text-primary" />
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-foreground">
-                            {room.room_name || "Room"}
+                            Room {roomIndex + 1}: {room.room_name || "Room"}
                           </p>
                           <p className="text-[11px] text-muted-foreground">
                             {items.length} products ·{" "}
@@ -776,17 +769,15 @@ export function BulkPriceSheet({
                           </p>
                         </div>
                       </button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 shrink-0 gap-1 rounded-full px-3 text-xs"
-                        onClick={() => onAddProduct(qrId)}
-                        disabled={saving}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Product
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Select value={addingProducts[qrId] || ""} onValueChange={value => setAddingProducts(current => ({ ...current, [qrId]: value }))}>
+                          <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Choose product" /></SelectTrigger>
+                          <SelectContent>{availableProducts.filter((p: any) => !(room.items || []).some((item: any) => String(item.product_id) === String(p.product_id))).map((product: any) => <SelectItem key={product.product_id} value={String(product.product_id)}>{product.product_name}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Input className="h-8 w-16 text-xs" type="number" min="0.001" step="0.001" value={addingQty[qrId] || "1"} onChange={e => setAddingQty(current => ({ ...current, [qrId]: e.target.value }))} aria-label="Product quantity" />
+                        <Button type="button" size="sm" variant="outline" className="h-8 gap-1 rounded-full px-2 text-xs" disabled={saving || !addingProducts[qrId]} onClick={() => { onAddProductById?.(qrId, addingProducts[qrId], Number(addingQty[qrId] || 1)); setAddingProducts(current => ({ ...current, [qrId]: "" })); }}><Plus className="h-3.5 w-3.5" />Add</Button>
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive" aria-label={`Remove ${room.room_name}`} disabled={saving} onClick={() => onDeleteRoom?.(qrId)}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
                     </div>
 
                     {/* Smooth collapse */}
@@ -840,18 +831,21 @@ export function BulkPriceSheet({
                             </thead>
                             <tbody className="divide-y">
                               {items.map(renderItemRow)}
+                              {items.map((item: any) => renderMaterialsRow(item))}
                             </tbody>
                           </table>
                         ) : (
                           <div className="grid gap-3 p-3 md:grid-cols-2">
-                            {items.map(renderItemCard)}
+                            {items.map((item: any) => <div key={String(item.qp_id)}>{renderItemCard(item)}{renderMaterialsEditor(item)}</div>)}
                           </div>
                         )}
                       </div>
                     </div>
-                  </section>
+                  </section>}
+                  </SortableBulkRoom>
                 );
               })
+              }</SortableContext></DndContext>
             )}
 
             {/* Discount & GST + Summary */}

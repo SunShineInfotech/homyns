@@ -1,4 +1,4 @@
-import { ArrowLeft, Bell, ChevronDown, LogOut, UserCircle } from "lucide-react";
+import { ArrowLeft, Bell, ChevronDown, LogOut, UserCircle, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/lib/confirm";
 import { notifications } from "@/data/mockData";
 import { useState, useEffect } from "react";
+import { applyThemeMode, getThemeMode, ThemeMode } from "@/lib/theme-mode";
 
 interface HeaderProps {
   title: string;
@@ -33,6 +34,7 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
   const confirm = useConfirm();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [companyData, setCompanyData] = useState<any>(null);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getThemeMode());
   const unread = notifications.filter((n) => n.unread).length;
 
   useEffect(() => {
@@ -100,6 +102,12 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
     return "H";
   };
 
+  const toggleTheme = () => {
+    const nextMode: ThemeMode = themeMode === "dark" ? "light" : "dark";
+    applyThemeMode(nextMode);
+    setThemeMode(nextMode);
+  };
+
   return (
     <header className="h-16 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between sticky top-0 z-30 shadow-sm">
       <div className="flex items-center gap-3 min-w-0">
@@ -119,6 +127,17 @@ export function Header({ title, subtitle, backTo }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1 md:gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
+          title={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
+          className="rounded-xl"
+        >
+          {themeMode === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </Button>
         {/* <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="relative rounded-xl">

@@ -96,16 +96,23 @@ const getIndiaToday = () => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
-// Default filter = the current month (India time): 1st → last day of the month.
+// Default filter = two calendar months before today through today (India time).
 const getDefaultDateRange = () => {
-  const [year, month] = getIndiaToday().split("-").map(Number);
-  const startDate = new Date(Date.UTC(year, month - 1, 1));
-  const endDate = new Date(Date.UTC(year, month, 0)); // day 0 of next month = last day of this month
+  const [year, month, day] = getIndiaToday().split("-").map(Number);
+  const targetMonth = month - 1 - 2;
+  const targetYear = year + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, normalizedMonth + 1, 0),
+  ).getUTCDate();
+  const startDate = new Date(
+    Date.UTC(targetYear, normalizedMonth, Math.min(day, lastDayOfTargetMonth)),
+  );
 
   const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
   return {
     start: toDateInputValue(startDate),
-    end: toDateInputValue(endDate),
+    end: getIndiaToday(),
   };
 };
 

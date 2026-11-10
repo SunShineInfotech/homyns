@@ -709,7 +709,14 @@ export default function QuotationView({ documentType = "quotation" }: { document
                         {/* Raw Materials Section */}
                         <div className="mt-4 space-y-4">
                           {items.map((item: any, idx: number) => {
-                            const rawMaterials = item.raw_materials || [];
+                            const productMaterials = Array.isArray(item.product_master_raw_materials) ? item.product_master_raw_materials : [];
+                            const savedMaterials = Array.isArray(item.raw_materials) ? item.raw_materials : [];
+                            const rawMaterials = productMaterials.length
+                              ? productMaterials.map((master: any) => {
+                                  const saved = savedMaterials.find((material: any) => String(material.rm_id) === String(master.rm_id));
+                                  return { ...master, ...saved, rm_name: master.rm_name || saved?.rm_name, brand_name: master.brand_name || saved?.brand_name, unit_name: master.unit_name || saved?.unit_name };
+                                })
+                              : savedMaterials;
                             if (rawMaterials.length === 0) return null;
 
                             return (
@@ -723,8 +730,8 @@ export default function QuotationView({ documentType = "quotation" }: { document
                                 <div className="flex flex-wrap gap-2">
                                   {rawMaterials.map((rm: any, rIdx: number) => (
                                     <Badge key={rIdx} variant="secondary" className="text-xs px-2 py-1 rounded-md">
-                                      {rm.rm_name || rm.name || "Material"}
-                                      {rm.required_qty && ` (${parseFloat(rm.required_qty).toFixed(2)} ${rm.unit || ''})`}
+                                      {rm.rm_name || rm.name || "Material"}{rm.brand_name && ` · Brand: ${rm.brand_name}`}
+                                      {(rm.required_qty || rm.rm_qty) && ` (${parseFloat(rm.required_qty || rm.rm_qty).toFixed(2)} ${rm.unit || rm.unit_name || ''})`}
                                     </Badge>
                                   ))}
                                 </div>

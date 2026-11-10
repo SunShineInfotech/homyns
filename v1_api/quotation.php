@@ -191,10 +191,34 @@ function enrichProductWithWorkOrder($sql, &$productRow, $includeHistory = false,
 
     // Raw materials
     if ($includeRawMaterials) {
-        $rmQuery = "SELECT qrm.*, rm.rm_name, b.brand_name
+        // Product master materials (same list shown on Product Form) are the
+        // source of truth for the product-wise "Raw Materials Used" display.
+        $productMasterQuery = "SELECT DISTINCT rm.rm_id, rm.rm_name, b.brand_name, u.unit_name
+                               FROM tbl_product_details pd
+                               INNER JOIN tbl_raw_material rm ON pd.rm_id = rm.rm_id
+                               LEFT JOIN tbl_brand b ON b.brand_id = rm.brand_id AND b.company_id = pd.company_id
+                               LEFT JOIN tbl_unit u ON u.unit_id = rm.unit_id
+                               WHERE pd.product_id = '{$productRow['product_id']}'
+                               AND pd.company_id = '{$productRow['company_id']}'
+                               AND pd.is_deleted = '1'
+                               AND rm.is_deleted = '1'
+                               AND rm.rm_name IS NOT NULL
+                               AND rm.rm_name <> ''
+                               ORDER BY rm.rm_name ASC";
+        $productMasterResult = mysqli_query($sql, $productMasterQuery);
+        $productMasterMaterials = [];
+        if ($productMasterResult) {
+            while ($materialRow = mysqli_fetch_assoc($productMasterResult)) {
+                $productMasterMaterials[] = $materialRow;
+            }
+        }
+        $productRow['product_master_raw_materials'] = $productMasterMaterials;
+
+        $rmQuery = "SELECT qrm.*, rm.rm_name, b.brand_name, u.unit_name
                     FROM tbl_quotation_raw_material qrm
                     LEFT JOIN tbl_raw_material rm ON qrm.rm_id = rm.rm_id
-                    LEFT JOIN tbl_brand b ON rm.brand_id = b.brand_id
+                    LEFT JOIN tbl_brand b ON rm.brand_id = b.brand_id AND b.company_id = qrm.company_id
+                    LEFT JOIN tbl_unit u ON rm.unit_id = u.unit_id
                     WHERE qrm.quotation_id = '{$productRow['quotation_id']}'
                     AND qrm.qp_id = '{$productRow['qp_id']}'
                     AND qrm.is_deleted = '1'";
@@ -1125,6 +1149,87 @@ switch ($type) {
             $error = mysqli_error($sql);
             logError('quotation', $error);
             $response = ['status' => 'error', 'message' => 'Failed to fetch invoice generation date'];
+        }
+        break;
+
+    case 17: // REPLACE RAW MATERIALS FOR A QUOTATION PRODUCT
+        if (empty($company_id) || empty($quotation_id) || empty($postData['qp_id'])) {
+            $response = ['status' => 'error', 'message' => 'Company ID, quotation ID, and quotation product ID are required'];
+            break;
+        }
+        $qp_id = mysqli_real_escape_string($sql, $postData['qp_id']);
+        $raw_materials = isset($postData['raw_materials']) && is_array($postData['raw_materials'])
+            ? $postData['raw_materials']
+            : null;
+        if ($raw_materials === null) {
+            $response = ['status' => 'error', 'message' => 'Raw materials must be provided as a list'];
+            break;
+        }
+
+        $productCheck = mysqli_query($sql, "SELECT qp_id FROM tbl_quotation_product
+                                             WHERE qp_id = '$qp_id'
+                                               AND quotation_id = '$quotation_id'
+                                               AND company_id = '$company_id'
+                                               AND is_deleted = '1'
+                                             LIMIT 1");
+        if (!$productCheck || mysqli_num_rows($productCheck) === 0) {
+            $response = ['status' => 'error', 'message' => 'Quotation product not found'];
+            break;
+        }
+
+        mysqli_begin_transaction($sql);
+        $saveFailed = false;
+        $saveError = '';
+        $deleteQuery = "UPDATE tbl_quotation_raw_material
+                        SET is_deleted = '0'
+                        WHERE qp_id = '$qp_id'
+                          AND quotation_id = '$quotation_id'
+                          AND company_id = '$company_id'
+                          AND is_deleted = '1'";
+        if (!mysqli_query($sql, $deleteQuery)) {
+            $saveFailed = true;
+            $saveError = mysqli_error($sql);
+        }
+
+        foreach ($raw_materials as $material) {
+            if ($saveFailed) break;
+            $rm_id = isset($material['rm_id']) ? mysqli_real_escape_string($sql, $material['rm_id']) : '';
+            $required_qty = isset($material['required_qty']) ? floatval($material['required_qty']) : 0;
+            $unit = isset($material['unit']) ? mysqli_real_escape_string($sql, $material['unit']) : '';
+            if (empty($rm_id) || $required_qty <= 0) {
+                $saveFailed = true;
+                $saveError = 'Each raw material needs an ID and quantity greater than zero';
+                break;
+            }
+
+            $materialCheck = mysqli_query($sql, "SELECT rm_id FROM tbl_raw_material
+                                                 WHERE rm_id = '$rm_id'
+                                                   AND company_id = '$company_id'
+                                                   AND is_deleted = '1'
+                                                 LIMIT 1");
+            if (!$materialCheck || mysqli_num_rows($materialCheck) === 0) {
+                $saveFailed = true;
+                $saveError = 'One or more raw materials were not found';
+                break;
+            }
+
+            $insertQuery = "INSERT INTO tbl_quotation_raw_material
+                            (company_id, quotation_id, qp_id, rm_id, required_qty, unit, is_deleted, c_date)
+                            VALUES
+                            ('$company_id', '$quotation_id', '$qp_id', '$rm_id', '$required_qty', '$unit', '1', '$c_date')";
+            if (!mysqli_query($sql, $insertQuery)) {
+                $saveFailed = true;
+                $saveError = mysqli_error($sql);
+            }
+        }
+
+        if ($saveFailed) {
+            mysqli_rollback($sql);
+            logError('quotation', 'Failed to replace product raw materials: ' . $saveError);
+            $response = ['status' => 'error', 'message' => 'Failed to update raw materials: ' . $saveError];
+        } else {
+            mysqli_commit($sql);
+            $response = ['status' => 'success', 'message' => 'Product raw materials updated successfully'];
         }
         break;
 

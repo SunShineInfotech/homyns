@@ -269,9 +269,26 @@ function getPrintDisplayInfo(item: any) {
     h !== "" && Number.isFinite(parseFloat(h)) ? parseFloat(h).toFixed(2) : "";
 
   const measureRaw = item.calculated_qty ?? item.qty ?? 0;
-  const measure = Number.isFinite(parseFloat(measureRaw))
-    ? parseFloat(measureRaw).toFixed(2)
-    : "0.00";
+  const dimensionUnit = String(item.dimension_unit || "feet").trim().toLowerCase();
+  let totalMeasure = Number.parseFloat(String(measureRaw));
+
+  // The item editor calculates inch dimensions in square feet. Recalculate
+  // inch-based items here too, since older API rows can contain a raw/inaccurate
+  // calculated_qty that would otherwise make the quotation PDF disagree.
+  if (!isFixed && (dimensionUnit === "inch" || dimensionUnit === "inches")) {
+    const toFeet = (value: unknown) => (Number.parseFloat(String(value || 0)) || 0) / 12;
+    const width = toFeet(item.width);
+    const height = toFeet(item.height);
+    const depth = toFeet(item.depth);
+    const length = toFeet(item.length);
+    const qty = Number.parseFloat(String(item.qty ?? item.quantity ?? 1)) || 1;
+
+    if (item.qty_type === "ByHW") totalMeasure = width * height * qty;
+    else if (item.qty_type === "ByHWD") totalMeasure = width * height * depth * qty;
+    else if (item.qty_type === "ByHWL") totalMeasure = width * height * length * qty;
+  }
+
+  const measure = Number.isFinite(totalMeasure) ? totalMeasure.toFixed(2) : "0.00";
 
   const rate = parseFloat(item.unit_price) || 0;
   const amount = parseFloat(item.total_price) || 0;
@@ -367,15 +384,19 @@ body{font-family:'Inter',system-ui,sans-serif;background:#e9edf1;}
 .qp-tbl tr.vr td.amt{color:var(--company-color, #ee3c31);}
 
 .in{font-weight:600;color:#1a1a1a;font-size:13px;}
-.irm{font-size:11px;color:#94a3b8;font-style:italic;margin-top:2px;}
+.irm{margin-top:10px;padding:7px 9px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;font-size:11px;color:#64748b;white-space:pre-wrap;overflow-wrap:anywhere;}
+.irm-label{display:block;margin-bottom:3px;color:#475569;font-size:10px;font-style:normal;font-weight:700;}
 .isp{display:inline-block;font-size:10px;background:#fef3c7;color:#d97706;border:1px solid #fde68a;border-radius:4px;padding:1px 6px;margin-top:3px;font-weight:600;}
 /* Raw materials: one clean text line (no pill backgrounds — html2canvas
    draws text slightly lower than the box, which made pills look misaligned) */
-.irml{display:block;margin-top:4px;margin-bottom:2px;font-size:10.5px;line-height:1.6;color:#64748b;}
-.irml-label{font-weight:700;color:#475569;margin-right:4px;}
-.irmlb{display:inline;}
-.irmlb b{font-weight:600;color:#475569;}
-.irml-sep{color:#94a3b8;padding:0 6px;}
+.qp-tbl tr.rm-row td,.qp-tbl tr.remark-row td{padding:5px 8px 8px;border-bottom:1px solid #eef1f4;}
+.qp-tbl tr.rm-row td:first-child,.qp-tbl tr.remark-row td:first-child{padding-left:20px;}
+.qp-tbl tr.rm-row td:last-child,.qp-tbl tr.remark-row td:last-child{padding-right:20px;}
+.irml{display:block;border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:7px 9px;color:#334155;font-size:10.5px;line-height:1.5;}
+.irml-label{display:block;font-weight:700;color:#1e40af;margin-bottom:4px;}
+.irml-list{display:block;color:#334155;}
+.irmlb{display:inline;color:#334155;}
+.irmlb:not(:last-child)::after{content:", ";}
 .tc{text-align:center;}.tr{text-align:right;}.tm{font-family:monospace;}
 
 /* Table footer TOTAL row — mirrors the PDF's bottom total bar */
@@ -1135,28 +1156,29 @@ export default function PublicQuotationView({
       const { per, wVal, hVal, measure, rate, amount, isFixed } =
         getPrintDisplayInfo(item);
       const qty = parseFloat(item.qty) || 1;
-      // Raw materials are only shown when an item actually has them —
-      // otherwise the row falls back purely to the PDF-style layout.
-      const rm = item.raw_materials || [];
+      const quotationMaterials = Array.isArray(item.raw_materials)
+        ? item.raw_materials
+        : [];
+      const productMasterMaterials = Array.isArray(item.product_master_raw_materials)
+        ? item.product_master_raw_materials
+        : [];
+      // Prefer quotation-item materials: these are the values edited for this
+      // specific quotation product. Use product master materials only as a
+      // fallback for older quotation rows without saved item materials.
+      const rawMaterialSource = quotationMaterials.length
+        ? quotationMaterials
+        : productMasterMaterials;
+      const rmNames = [...new Set(
+        rawMaterialSource
+          .map((rawMaterial: any) => String(typeof rawMaterial === "string" ? rawMaterial : rawMaterial.rm_name || rawMaterial.name || "").trim())
+          .filter(Boolean),
+      )];
       tableRows.push(
         <tr key={`n${gi}-${ii}`} className="nr">
           <td>{sr}</td>
           <td colSpan={8}>
             <div className="in">{item.product_name}</div>
-            {item.remark && <div className="irm">{item.remark}</div>}
             {item.is_special === "1" && <span className="isp">Special</span>}
-            {rm.length > 0 && (
-              <div className="irml">
-                <span className="irml-label">Material:</span>
-                {rm.map((r: any, ri: number) => (
-                  <span key={ri} className="irmlb">
-                    {ri > 0 && <span className="irml-sep">·</span>}
-                    {r.rm_name || r.name || "Material"}
-                    {r.brand_name && <b>{` (${r.brand_name})`}</b>}
-                  </span>
-                ))}
-              </div>
-            )}
           </td>
         </tr>,
       );
@@ -1173,6 +1195,32 @@ export default function PublicQuotationView({
           <td className="tr tm amt">{fc(amount)}</td>
         </tr>,
       );
+      const remark = String(item.remark ?? "").trim();
+      if (remark || rmNames.length > 0) {
+        tableRows.push(
+          <tr key={`remark-${gi}-${ii}`} className="remark-row">
+            <td></td>
+            <td colSpan={8}>
+              {rmNames.length > 0 && (
+                <div className="irml">
+                  <span className="irml-label">Raw Materials Used</span>
+                  <div className="irml-list">
+                    {rmNames.map((name: string) => (
+                      <span key={name} className="irmlb">{name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {remark && (
+                <div className="irm">
+                  <span className="irm-label">Remark</span>
+                  {remark}
+                </div>
+              )}
+            </td>
+          </tr>,
+        );
+      }
     });
   });
 

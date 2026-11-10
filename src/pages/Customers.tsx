@@ -44,6 +44,7 @@ import {
   X,
   Copy,
   Building2,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -315,6 +316,25 @@ export default function Customers() {
     } else {
       toast({ title: "Info", description: "Please enter Phone 1 first", variant: "default" });
     }
+  };
+
+  const sendPaymentReminder = (customer: CustomerWithDetails) => {
+    const balance = Number(customer.wallet) || 0;
+    if (balance <= 0) {
+      toast({ title: "No payment due", description: "This customer has no outstanding wallet balance." });
+      return;
+    }
+    const phone = String(customer.whatsapp_number || customer.phone1 || "").replace(/\D/g, "");
+    if (phone.length < 10) {
+      toast({ title: "WhatsApp number missing", description: "Add a valid WhatsApp number or phone number to this customer first.", variant: "destructive" });
+      return;
+    }
+    const internationalPhone = phone.length === 10 ? `91${phone}` : phone;
+    let companyName = "our team";
+    try { companyName = JSON.parse(localStorage.getItem("company_data") || "{}").company_name || companyName; } catch { /* use the generic sender */ }
+    const formattedBalance = `₹${balance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const message = `Dear ${customer.client_name || "Customer"},\n\nGreetings from ${companyName}. This is a gentle reminder that our records show an outstanding balance of ${formattedBalance} on your account. Please arrange payment at your convenience. If you have already paid, kindly ignore this message.\n\nThank you.`;
+    window.open(`https://wa.me/${internationalPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   };
 
   /* ── form submit → show confirm ───────────────────────────────── */
@@ -605,6 +625,17 @@ export default function Customers() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg text-green-600 hover:bg-green-500/10 hover:text-green-700"
+                              onClick={() => sendPaymentReminder(c)}
+                              disabled={(Number(c.wallet) || 0) <= 0 || !(c.whatsapp_number || c.phone1)}
+                              title="Send payment reminder on WhatsApp"
+                              aria-label={`Send ${c.client_name} a WhatsApp payment reminder`}
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </Button>
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -652,6 +683,17 @@ export default function Customers() {
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg text-green-600 hover:bg-green-500/10 hover:text-green-700"
+                        onClick={() => sendPaymentReminder(c)}
+                        disabled={(Number(c.wallet) || 0) <= 0 || !(c.whatsapp_number || c.phone1)}
+                        title="Send payment reminder on WhatsApp"
+                        aria-label={`Send ${c.client_name} a WhatsApp payment reminder`}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </Button>
                       <Button 
                         variant="ghost" 
                         size="icon" 

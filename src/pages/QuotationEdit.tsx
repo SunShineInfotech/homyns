@@ -51,6 +51,9 @@ import {
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WorkOrderManager } from "@/components/quotation/WorkOrderManager";
+import { agencyService, Agency } from "@/services/agency.service";
+import { workTypeService, WorkType } from "@/services/work-type.service";
+import { useConfirm } from "@/lib/confirm";
 import {
   BulkPriceSheet,
   BulkItemEdit,
@@ -91,6 +94,7 @@ import {
   ClipboardList,
   Sparkles,
   Ruler,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -255,20 +259,6 @@ function SortableRoomItem({
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteRoom(
-                  room.qr_id,
-                  room.room_name || `Room ${room.sort_order + 1}`,
-                );
-              }}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
             <span className="font-semibold text-foreground whitespace-nowrap">
               {formatCurrency(roomTotal)}
             </span>
@@ -282,33 +272,11 @@ function SortableRoomItem({
         {/* Room Content */}
         {isExpanded && (
           <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                Products
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1 rounded-lg text-xs"
-                onClick={() => openAddProductDialog(room.qr_id)}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Product
-              </Button>
-            </div>
+            <span className="text-sm font-medium text-muted-foreground">Products</span>
 
             {items.length === 0 ? (
               <div className="text-center py-6 text-muted-foreground">
                 <p className="text-sm">No items in this room</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 gap-1"
-                  onClick={() => openAddProductDialog(room.qr_id)}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Product
-                </Button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -349,28 +317,6 @@ function SortableRoomItem({
                               </Badge>
                             )}
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 -mt-1 -mr-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Edit ${item.product_name}`}
-                            className="h-9 w-9 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10"
-                            onClick={() => handleEditItem(room, item)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Remove ${item.product_name}`}
-                            className="h-9 w-9 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            onClick={() =>
-                              onDeleteItem(item.qp_id, item.product_name)
-                            }
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
                         </div>
                       </div>
 
@@ -571,16 +517,6 @@ function SortableRoomItem({
                               )}
                             </div>
                           )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-2 rounded-lg"
-                            onClick={() => onOpenWorkOrder(item)}
-                          >
-                            <ClipboardList className="h-4 w-4" />
-                            Update product work order
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -598,6 +534,7 @@ function SortableRoomItem({
 // ─── Main Component ──────────────────────────────────────────────────────
 export default function QuotationEdit() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -612,6 +549,13 @@ export default function QuotationEdit() {
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
   const [workOrderManagerOpen, setWorkOrderManagerOpen] = useState(false);
   const [workOrderProduct, setWorkOrderProduct] = useState<any | null>(null);
+  const [agencyWorkDialogOpen, setAgencyWorkDialogOpen] = useState(false);
+  const [agencyWorkLoading, setAgencyWorkLoading] = useState(false);
+  const [agencyWorkSaving, setAgencyWorkSaving] = useState(false);
+  const [agencyWorkTypes, setAgencyWorkTypes] = useState<WorkType[]>([]);
+  const [agencyPeople, setAgencyPeople] = useState<Agency[]>([]);
+  const [agencyWorkAssignments, setAgencyWorkAssignments] = useState<any[]>([]);
+  const [agencyWorkTypeToAdd, setAgencyWorkTypeToAdd] = useState("");
 
   // Room order state (for drag‑and‑drop)
   const [roomOrder, setRoomOrder] = useState<any[]>([]);
@@ -651,6 +595,12 @@ export default function QuotationEdit() {
     gst_percent: 0,
     description: "",
   });
+  const duplicateQuickProduct = products.find(
+    (product) =>
+      product.product_name.trim().toLocaleLowerCase() ===
+      quickProduct.product_name.trim().toLocaleLowerCase() &&
+      Boolean(quickProduct.product_name.trim()),
+  );
 
   // Room-wise bulk pricing (now also qty type / unit / qty / H-W-D-L).
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
@@ -661,6 +611,8 @@ export default function QuotationEdit() {
     Record<string, BulkItemEdit>
   >({});
   const [bulkDeletedItemIds, setBulkDeletedItemIds] = useState<string[]>([]);
+  const [bulkMaterialsByProduct, setBulkMaterialsByProduct] = useState<Record<string, EditRawMaterial[]>>({});
+  const [bulkMaterialChanges, setBulkMaterialChanges] = useState<string[]>([]);
 
   // Discount & GST Edit
   const [discountEditOpen, setDiscountEditOpen] = useState(false);
@@ -901,6 +853,117 @@ export default function QuotationEdit() {
       });
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const openAgencyWorkDialog = async () => {
+    if (!quotation) return;
+    setAgencyWorkDialogOpen(true);
+    setAgencyWorkLoading(true);
+    try {
+      const [typesResult, agencyResult, savedResult] = await Promise.all([
+        workTypeService.list(getCompanyId()),
+        agencyService.list(getCompanyId()),
+        agencyService.quotationAssignments(getCompanyId(), String(quotation.quotation_id)),
+      ]);
+      if (typesResult.status !== "success") throw new Error(typesResult.message || "Could not load work types");
+      if (agencyResult.status !== "success") throw new Error(agencyResult.message || "Could not load agencies");
+      if (savedResult.status !== "success") throw new Error(savedResult.message || "Could not load saved agency assignments");
+      const types = typesResult.data || [];
+      const saved = (savedResult.data || []) as any[];
+      setAgencyWorkTypes(types);
+      setAgencyPeople(agencyResult.data || []);
+      if (saved.length) {
+        setAgencyWorkAssignments(saved.map((row: any) => ({
+          work_type_id: String(row.work_type_id),
+          work_type_name: row.work_type_name,
+          agency_id: String(row.agency_id),
+          original_agency_id: String(row.agency_id),
+          wallet_entry_id: row.wallet_entry_id ? String(row.wallet_entry_id) : "",
+          preserve_wallet_entry: Boolean(row.wallet_agency_id && String(row.wallet_agency_id) !== String(row.agency_id)),
+          agency_person: row.contact_person || row.agency_name,
+          amount: Number(row.amount) > 0 ? String(row.amount) : "",
+          remark: row.remark || "",
+        })));
+      } else {
+        setAgencyWorkAssignments(types.map((workType) => ({
+          work_type_id: String(workType.work_type_id),
+          work_type_name: workType.name,
+          agency_id: "",
+          original_agency_id: "",
+          wallet_entry_id: "",
+          preserve_wallet_entry: false,
+          amount: "",
+          remark: "",
+        })));
+      }
+    } catch (error: any) {
+      toast({ title: "Could not load agency work details", description: error.message, variant: "destructive" });
+    } finally {
+      setAgencyWorkLoading(false);
+    }
+  };
+
+  const changeWorkAgency = async (workTypeId: string, nextAgencyId: string) => {
+    const row = agencyWorkAssignments.find((item) => String(item.work_type_id) === workTypeId);
+    if (!row || String(row.agency_id || "") === nextAgencyId) return;
+    let cancelPreviousDeal = false;
+    let preserveWalletEntry = Boolean(row.preserve_wallet_entry);
+    if (row.original_agency_id && String(row.original_agency_id) !== nextAgencyId) {
+      cancelPreviousDeal = await confirm({
+        title: "Was the previous agency deal cancelled?",
+        message: "Yes will remove the previous wallet entry for this quotation and reverse that agency’s credit. No will keep the previous wallet entry and change the assigned agency without adding the same amount to the new agency again.",
+        confirmText: "Yes, cancel previous deal",
+        cancelText: "No, keep wallet entry",
+        destructive: true,
+      });
+      preserveWalletEntry = !cancelPreviousDeal;
+    }
+    setAgencyWorkAssignments((current) => current.map((item) => String(item.work_type_id) === workTypeId ? {
+      ...item,
+      agency_id: nextAgencyId,
+      cancel_previous_deal: cancelPreviousDeal,
+      preserve_wallet_entry: preserveWalletEntry,
+    } : item));
+  };
+
+  const submitAgencyWorkAssignments = async () => {
+    if (!quotation) return;
+    const incomplete = agencyWorkAssignments.find((row) => !row.agency_id && (String(row.amount || "").trim() !== "" || String(row.remark || "").trim() !== ""));
+    if (incomplete) {
+      toast({ title: "Select an agency person", description: `Choose an agency for ${incomplete.work_type_name} before entering an amount or remark.`, variant: "destructive" });
+      return;
+    }
+    const assignmentsToSave = agencyWorkAssignments.filter((row) => row.agency_id);
+    const total = assignmentsToSave.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const accepted = await confirm({
+      title: "Save agency assignments?",
+      message: `Save ${assignmentsToSave.length} agency work assignments (₹${total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}). Rows without an agency will be skipped. Existing assignments will be replaced, and affected agency wallets will be adjusted.`,
+      confirmText: "Save changes",
+    });
+    if (!accepted) return;
+    setAgencyWorkSaving(true);
+    try {
+      const result = await agencyService.saveQuotationAssignments(
+        getCompanyId(),
+        String(quotation.quotation_id),
+        getEmployeeId(),
+        assignmentsToSave.map((row) => ({
+          work_type_id: row.work_type_id,
+          agency_id: row.agency_id,
+          amount: Number(row.amount || 0),
+          remark: String(row.remark).trim(),
+          cancel_previous_deal: Boolean(row.cancel_previous_deal),
+          preserve_wallet_entry: Boolean(row.preserve_wallet_entry),
+        })),
+      );
+      if (result.status !== "success") throw new Error(result.message || "Could not save agency assignments");
+      toast({ title: "Agency assignments updated", description: "Quotation details and affected agency wallet balances were updated." });
+      await openAgencyWorkDialog();
+    } catch (error: any) {
+      toast({ title: "Could not save agency assignments", description: error.message, variant: "destructive" });
+    } finally {
+      setAgencyWorkSaving(false);
     }
   };
 
@@ -1612,6 +1675,18 @@ export default function QuotationEdit() {
     setBulkUnitPrices(prices);
     setBulkItemEdits({});
     setBulkDeletedItemIds([]);
+    const materials: Record<string, EditRawMaterial[]> = {};
+    roomOrder.forEach((room: any) => (room.items || []).forEach((item: any) => {
+      materials[String(item.qp_id)] = (item.raw_materials || []).map((rm: any) => ({
+        rm_id: String(rm.rm_id), rm_name: rm.rm_name || rm.name || "Material",
+        brand_name: rm.brand_name || "", unit: rm.unit || "",
+        required_qty: String(roundToThree(Number(rm.required_qty) || 0)),
+      }));
+    }));
+    setBulkMaterialsByProduct(materials);
+    setBulkMaterialChanges([]);
+    void fetchRawMaterialMaster();
+    void fetchAvailableRooms();
     if (quotation) {
       setDiscountType((quotation.discount_type as "Percent" | "INR") || "INR");
       setDiscountValue(Number(quotation.discount_value) || 0);
@@ -1622,6 +1697,48 @@ export default function QuotationEdit() {
       );
     }
     setBulkPriceOpen(true);
+  };
+
+  const addRoomFromBulk = async (roomId: string) => {
+    if (!quotation || !roomId) return;
+    setSaving(true);
+    try {
+      const res = await quotationService.addQuotationRoom({ type: 11, quotation_id: quotation.quotation_id, room_id: roomId, company_id: getCompanyId() });
+      if (res.status !== "success") throw new Error(res.message || "Could not add room");
+      await fetchData(false);
+      await fetchAvailableRooms();
+      toast({ title: "Room added", description: "The room is now included in this quotation." });
+    } catch (e: any) { toast({ title: "Could not add room", description: e.message, variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const deleteRoomFromBulk = async (qrId: string) => {
+    if (!quotation || !window.confirm("Remove this room and its products from the quotation?")) return;
+    setSaving(true);
+    try {
+      const res = await quotationService.deleteQuotationRoom({ type: 12, quotation_id: quotation.quotation_id, qr_id: qrId, company_id: getCompanyId() });
+      if (res.status !== "success") throw new Error(res.message || "Could not remove room");
+      await fetchData(false);
+      await fetchAvailableRooms();
+      toast({ title: "Room removed", description: "The room and its quotation items were removed." });
+    } catch (e: any) { toast({ title: "Could not remove room", description: e.message, variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const addProductFromBulk = async (qrId: string, productId: string, qty: number) => {
+    if (!quotation || !qrId || !productId) return;
+    const product = products.find((p: any) => String(p.product_id) === String(productId));
+    const room = roomOrder.find((r: any) => String(r.qr_id) === String(qrId));
+    if (!product || !room) return;
+    setSaving(true);
+    try {
+      const draft = { product_id: product.product_id, qty_type: product.qty_type || "Fixed", qty: qty || 1, height: product.height || 0, width: product.width || 0, depth: product.depth || 0, length: product.length || 0, dimension_unit: "inches", unit_price: product.price || 0 };
+      const res = await quotationService.addQuotationProduct({ type: 8, quotation_id: quotation.quotation_id, qr_id: qrId, room_id: room.room_id || "", ...draft, total_price: calculateItemTotal(draft), remark: "", company_id: getCompanyId() });
+      if (res.status !== "success") throw new Error(res.message || "Could not add product");
+      await fetchData(false);
+      toast({ title: "Product added", description: `${product.product_name} was added to ${room.room_name}.` });
+    } catch (e: any) { toast({ title: "Could not add product", description: e.message, variant: "destructive" }); }
+    finally { setSaving(false); }
   };
 
   const bulkSubtotal = roomOrder.reduce(
@@ -1726,6 +1843,20 @@ export default function QuotationEdit() {
           }
         }
       }
+      for (const qpId of bulkMaterialChanges) {
+        if (bulkDeletedItemIds.includes(qpId)) continue;
+        const rmRes = await quotationService.updateQuotationProductRawMaterials({
+          quotation_id: String(quotation.quotation_id),
+          qp_id: qpId,
+          company_id: getCompanyId(),
+          raw_materials: (bulkMaterialsByProduct[qpId] || []).map((rm) => ({
+            rm_id: rm.rm_id,
+            required_qty: roundToThree(Number(rm.required_qty) || 0),
+            unit: rm.unit,
+          })),
+        });
+        if (rmRes.status !== "success") throw new Error(rmRes.message || "Raw material update failed");
+      }
       const subtotal = roundToTwo(
         roomOrder.reduce(
           (sum: number, room: any) =>
@@ -1802,21 +1933,9 @@ export default function QuotationEdit() {
     }
   };
 
-  // ─── Drag End Handler ──────────────────────────────────────────────
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    // Find indices in the current roomOrder
-    const oldIndex = roomOrder.findIndex((room) => room.qr_id === active.id);
-    const newIndex = roomOrder.findIndex((room) => room.qr_id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    // Reorder locally
-    const newOrder = arrayMove(roomOrder, oldIndex, newIndex);
+  // ─── Persist room order from either room editor ──────────────────────
+  const persistRoomOrder = async (newOrder: any[], previousOrder = roomOrder) => {
     setRoomOrder(newOrder);
-
-    // Prepare payload for API: assign sort_order based on new index
     const roomOrderPayload = newOrder.map((room, index) => ({
       qr_id: room.qr_id,
       sort_order: index,
@@ -1835,9 +1954,17 @@ export default function QuotationEdit() {
         description: "Failed to update room order",
         variant: "destructive",
       });
-      // Revert to previous order on error
-      setRoomOrder(roomOrder);
+      setRoomOrder(previousOrder);
     }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = roomOrder.findIndex((room) => String(room.qr_id) === String(active.id));
+    const newIndex = roomOrder.findIndex((room) => String(room.qr_id) === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    await persistRoomOrder(arrayMove(roomOrder, oldIndex, newIndex));
   };
 
   // ─── Render ────────────────────────────────────────────────────────
@@ -1985,22 +2112,11 @@ export default function QuotationEdit() {
                 Work Orders
               </Button>
             )}
-            <Button
-              variant="outline"
-              className="gap-2 rounded-xl"
-              onClick={() => {
-                setDiscountEditOpen(true);
-                setDiscountType(
-                  (quotation.discount_type as "Percent" | "INR") || "INR",
-                );
-                setDiscountValue(quotation.discount_value || 0);
-                setGstPercent(quotation.gst_percent || 0);
-                setIsGstApplicable(quotation.gst_applicable !== false);
-              }}
-            >
-              <Calculator className="w-4 h-4" />
-              Discount & GST
-            </Button>
+            {quotation.status === "Work In Progress" && (
+              <Button variant="outline" className="gap-2 rounded-xl" onClick={() => void openAgencyWorkDialog()}>
+                <Building2 className="h-4 w-4" /> Manage Agencies
+              </Button>
+            )}
             <Button
               onClick={() => setStatusDialogOpen(true)}
               className="gap-2 rounded-xl"
@@ -2068,35 +2184,11 @@ export default function QuotationEdit() {
                   <Building2 className="w-4 h-4 text-muted-foreground" />
                   Room-wise Breakdown
                 </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1 rounded-lg text-xs"
-                  onClick={() => {
-                    fetchAvailableRooms();
-                    setAddRoomDialogOpen(true);
-                  }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Room
-                </Button>
               </div>
 
               {roomOrder.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <p className="text-sm">No rooms found</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 gap-1"
-                    onClick={() => {
-                      fetchAvailableRooms();
-                      setAddRoomDialogOpen(true);
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Room
-                  </Button>
                 </div>
               ) : (
                 <DndContext
@@ -2355,6 +2447,7 @@ export default function QuotationEdit() {
         employeeId={getEmployeeId()}
         quotationNumber={quotation.quotation_number}
         rooms={roomOrder}
+        onRoomsReorder={(orderedRooms) => void persistRoomOrder(orderedRooms)}
         onProductUpdated={(updatedProduct) => {
           const updateRooms = (rooms: any[]) =>
             rooms.map((room) => ({
@@ -2373,6 +2466,70 @@ export default function QuotationEdit() {
           );
         }}
       />
+
+      <Dialog open={agencyWorkDialogOpen} onOpenChange={(value) => !agencyWorkSaving && setAgencyWorkDialogOpen(value)}>
+        <DialogContent className="max-h-[90dvh] w-[calc(100%-1rem)] overflow-y-auto rounded-2xl sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Agency Work Details · {quotation.quotation_number}</DialogTitle>
+            <DialogDescription>Assign, change, or remove agency work. Saving updates the matching agency wallet balances.</DialogDescription>
+          </DialogHeader>
+          {agencyWorkLoading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div>
+          ) : agencyWorkTypes.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No agency work types are configured. Add them under Master → Agency Work Types.</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead className="bg-muted/50"><tr><th className="px-3 py-3 text-left">Agency Work Types</th><th className="px-3 py-3 text-left">Agency Person</th><th className="w-40 px-3 py-3 text-left">Amount (₹)</th><th className="px-3 py-3 text-left">Remark</th><th className="w-16 px-3 py-3 text-right">Remove</th></tr></thead>
+                  <tbody className="divide-y">
+                    {agencyWorkAssignments.map((row, index) => {
+                      const matchingPeople = agencyPeople.filter((agency) =>
+                        (agency.status || "Active") === "Active" &&
+                        Boolean(agency.contact_person?.trim()) &&
+                        (agency.work_type_ids || []).map(String).includes(String(row.work_type_id)),
+                      );
+                      const selectedAgency = agencyPeople.find((agency) => String(agency.agency_id) === String(row.agency_id));
+                      return <tr key={`${row.work_type_id}-${index}`}>
+                        <td className="px-3 py-3 font-medium">{row.work_type_name}</td>
+                        <td className="min-w-64 px-3 py-2">
+                          <SearchableSelect
+                            options={matchingPeople.map((agency) => ({ value: String(agency.agency_id), label: `${agency.contact_person} · ${agency.firm_name || agency.agency_name}`, sublabel: agency.phone || "Phone number not set" }))}
+                            value={String(row.agency_id || "")}
+                            onChange={(value) => void changeWorkAgency(String(row.work_type_id), value)}
+                            placeholder={matchingPeople.length ? "Select agency person" : "No linked agency people"}
+                            searchPlaceholder="Search agency people…"
+                            disabled={matchingPeople.length === 0}
+                          />
+                          {selectedAgency && <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{selectedAgency.contact_person || selectedAgency.agency_name} · {selectedAgency.firm_name || selectedAgency.agency_name}<br />{selectedAgency.phone || "Phone number not set"}</p>}
+                        </td>
+                        <td className="px-3 py-2"><Input aria-label={`${row.work_type_name} amount`} type="number" min="0.01" step="0.01" value={row.amount} onChange={(event) => setAgencyWorkAssignments((current) => current.map((item) => item.work_type_id === row.work_type_id ? { ...item, amount: event.target.value } : item))} placeholder="0.00" /></td>
+                        <td className="px-3 py-2"><Input aria-label={`${row.work_type_name} remark`} value={row.remark} onChange={(event) => setAgencyWorkAssignments((current) => current.map((item) => item.work_type_id === row.work_type_id ? { ...item, remark: event.target.value } : item))} placeholder="Work details / note" /></td>
+                        <td className="px-3 py-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${row.work_type_name}`} onClick={() => setAgencyWorkAssignments((current) => current.filter((item) => item.work_type_id !== row.work_type_id))}><Trash2 className="h-4 w-4 text-destructive" /></Button></td>
+                      </tr>;
+                    })}
+                    {!agencyWorkAssignments.length && <tr><td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">No agency work assignments. Add a work type below if needed.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <SearchableSelect
+                  options={agencyWorkTypes.filter((type) => !agencyWorkAssignments.some((row) => String(row.work_type_id) === String(type.work_type_id))).map((type) => ({ value: String(type.work_type_id), label: type.name }))}
+                  value={agencyWorkTypeToAdd}
+                  onChange={setAgencyWorkTypeToAdd}
+                  placeholder="Choose a work type"
+                  searchPlaceholder="Search work types…"
+                />
+                <Button type="button" variant="outline" className="gap-2" disabled={!agencyWorkTypeToAdd} onClick={() => { const workType = agencyWorkTypes.find((item) => String(item.work_type_id) === agencyWorkTypeToAdd); if (!workType) return; setAgencyWorkAssignments((current) => [...current, { work_type_id: String(workType.work_type_id), work_type_name: workType.name, agency_id: "", original_agency_id: "", wallet_entry_id: "", preserve_wallet_entry: false, amount: "", remark: "" }]); setAgencyWorkTypeToAdd(""); }}><Plus className="h-4 w-4" />Add work type</Button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                <p className="text-sm text-muted-foreground">Total assigned: <strong className="text-foreground">{formatCurrency(agencyWorkAssignments.reduce((sum, row) => sum + (Number(row.amount) || 0), 0))}</strong></p>
+                <div className="flex gap-2"><Button type="button" variant="outline" onClick={() => setAgencyWorkDialogOpen(false)} disabled={agencyWorkSaving}>Cancel</Button><Button type="button" onClick={() => void submitAgencyWorkAssignments()} disabled={agencyWorkSaving || agencyWorkLoading}>{agencyWorkSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save Agency Work"}</Button></div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Status Update Dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
@@ -3020,6 +3177,12 @@ export default function QuotationEdit() {
         onOpenChange={(open) => !saving && setBulkPriceOpen(open)}
         saving={saving}
         rooms={roomOrder}
+        availableRooms={availableRooms}
+        availableProducts={products}
+        rawMaterialMaster={rawMaterialMaster}
+        materialsByProduct={bulkMaterialsByProduct}
+        onMaterialsByProductChange={setBulkMaterialsByProduct}
+        onMaterialChangesChange={setBulkMaterialChanges}
         unitPrices={bulkUnitPrices}
         onUnitPricesChange={setBulkUnitPrices}
         itemEdits={bulkItemEdits}
@@ -3045,15 +3208,11 @@ export default function QuotationEdit() {
         calculateTotalMeasure={calculateTotalMeasure}
         formatCurrency={formatCurrency}
         getQtyTypeLabel={getQtyTypeLabel}
-        onAddRoom={() => {
-          setBulkPriceOpen(false);
-          void fetchAvailableRooms();
-          setAddRoomDialogOpen(true);
-        }}
-        onAddProduct={(qrId) => {
-          setBulkPriceOpen(false);
-          openAddProductDialog(qrId);
-        }}
+        onAddRoom={() => void fetchAvailableRooms()}
+        onAddRoomById={(roomId) => void addRoomFromBulk(roomId)}
+        onDeleteRoom={(qrId) => void deleteRoomFromBulk(qrId)}
+        onAddProduct={(qrId) => openAddProductDialog(qrId)}
+        onAddProductById={(qrId, productId, qty) => void addProductFromBulk(qrId, productId, qty)}
         onSave={() => void saveBulkPricing()}
       />
 
@@ -3189,6 +3348,12 @@ export default function QuotationEdit() {
                   }
                   placeholder="e.g. Premium Wood Table"
                 />
+                {duplicateQuickProduct && (
+                  <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    “{duplicateQuickProduct.product_name}” is already in your product list. You can still add it.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Category *</Label>

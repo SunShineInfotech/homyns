@@ -62,6 +62,7 @@ const PAGE_GROUPS = [
       { value: "employees", label: "Employees" },
       { value: "clients", label: "Clients" },
       { value: "vendors", label: "Vendors" },
+      { value: "agencies", label: "Agencies" },
     ]
   },
   {
@@ -73,8 +74,8 @@ const PAGE_GROUPS = [
       { value: "purchase-returns", label: "Purchase Returns" },
       { value: "purchase-payments", label: "Purchase Payments" },
       { value: "stock-warehouses", label: "Warehouses & Decks" },
-      { value: "stock-in", label: "Stock IN" },
       { value: "stock-out", label: "Stock OUT" },
+      { value: "stock-dead", label: "Dead Stock" },
       { value: "stock-transfer", label: "Stock Transfer" },
       { value: "stock-ledger", label: "Stock Ledger" },
       { value: "stock-all", label: "All Stock" },
@@ -120,6 +121,7 @@ const PAGE_GROUPS = [
       { value: "expense-categories", label: "Expense Categories" },
       { value: "lead-sources", label: "Lead Sources" },
       { value: "lead-statuses", label: "Lead Status" },
+      { value: "work-types", label: "Agency Work Types" },
       { value: "units", label: "Units" },
       { value: "brands", label: "Brands" },
       { value: "raw-material-types", label: "Raw Material Types" },

@@ -49,6 +49,16 @@ export interface FinanceLedgerRow extends FinanceTransaction {
   running_balance: number | string;
 }
 
+export interface FinanceDashboardData {
+  counts: { customers: number; vendors: number; agencies: number; other_income: number; other_expense: number };
+  totals: { customer_outstanding: number; vendor_outstanding: number; agency_pending: number; other_income: number; other_expense: number };
+  customers: Array<{ id: string; name: string; amount: number }>;
+  vendors: Array<{ id: string; name: string; amount: number }>;
+  agencies: Array<{ id: string; name: string; amount: number }>;
+  monthly: Array<{ month: string; income: number; expense: number }>;
+  expense_categories: Array<{ name: string; amount: number }>;
+}
+
 class FinanceService extends BaseService {
   constructor() { super("finance.php"); }
   categories(company_id: string) { return this.post<ApiResponse<ExpenseCategory[]>>({ type: 1, company_id }); }
@@ -60,6 +70,7 @@ class FinanceService extends BaseService {
   transactions(company_id: string, filters: Record<string, string> = {}) { return this.post<ApiResponse<FinanceTransaction[]> & { income_total?: number; expense_total?: number }>({ type: 7, company_id, ...filters }); }
   accountLedger(company_id: string, filters: { account_id: string; from_date: string; to_date: string }) { return this.post<ApiResponse<FinanceLedgerRow[]> & { account_name?: string; opening_balance?: number; closing_balance?: number; debit_total?: number; credit_total?: number }>({ type: 10, company_id, ...filters }); }
   transferBetweenAccounts(company_id: string, item: { transfer_number?: string; transfer_date: string; debit_account_id: string; credit_account_id: string; amount: number | string; debit_remark: string; credit_remark: string }) { return this.post<ApiResponse>({ type: 11, company_id, ...item }); }
+  dashboard(company_id: string, from_date: string, to_date: string) { return this.post<ApiResponse<FinanceDashboardData>>({ type: 12, company_id, from_date, to_date }); }
   saveTransaction(company_id: string, kind: "expense" | "income", item: Partial<FinanceTransaction>) { return this.post<ApiResponse>({ type: 8, company_id, kind, ...item }); }
   deleteTransaction(company_id: string, transaction_id: string) { return this.post<ApiResponse>({ type: 9, company_id, transaction_id }); }
 }
